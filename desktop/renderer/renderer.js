@@ -517,8 +517,9 @@ document.getElementById('attach-slide-btn').addEventListener('click', async () =
 
 window.lectureApp.onTranscriptSegment((segment) => {
   const line = document.createElement('div');
-  line.className = 'transcript-line';
-  line.innerHTML = `<span class="ts">[${formatTimestamp(segment.startSec)}]</span>${escapeHtml(segment.text)}`;
+  line.className = segment.marked ? 'transcript-line transcript-line-marked' : 'transcript-line';
+  const marker = segment.marked ? `<span class="marker-star" title="Отмечено как важное">${icon('star', 12)}</span>` : '';
+  line.innerHTML = `<span class="ts">[${formatTimestamp(segment.startSec)}]</span>${marker}${escapeHtml(segment.text)}`;
   transcriptBox.appendChild(line);
   transcriptBox.scrollTop = transcriptBox.scrollHeight;
 });
@@ -589,6 +590,26 @@ async function openSubjectGrid() {
   document.getElementById('lib-chat-btn').style.display = 'none';
 
   const subjects = await window.lectureApp.listSubjects();
+  const wrapper = document.createElement('div');
+
+  const stats = await window.lectureApp.getLibraryStats();
+  if (stats.lectureCount > 0) {
+    const hours = stats.totalDurationSec / 3600;
+    const hoursLabel = hours >= 10 ? Math.round(hours) : Math.round(hours * 10) / 10;
+    const lastActivity = stats.lastActivityDate
+      ? new Date(stats.lastActivityDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+      : '—';
+    const statsBar = document.createElement('div');
+    statsBar.className = 'library-stats';
+    statsBar.innerHTML = `
+      <div class="library-stat"><span class="library-stat-num">${stats.subjectCount}</span><span class="library-stat-label">${pluralForm(stats.subjectCount, 'предмет', 'предмета', 'предметов')}</span></div>
+      <div class="library-stat"><span class="library-stat-num">${stats.lectureCount}</span><span class="library-stat-label">${pluralLectures(stats.lectureCount)} записано</span></div>
+      <div class="library-stat"><span class="library-stat-num">${hoursLabel}</span><span class="library-stat-label">${pluralForm(Math.round(hours), 'час', 'часа', 'часов')} расшифровано</span></div>
+      <div class="library-stat"><span class="library-stat-num">${lastActivity}</span><span class="library-stat-label">последняя запись</span></div>
+    `;
+    wrapper.appendChild(statsBar);
+  }
+
   const grid = document.createElement('div');
   grid.className = 'card-grid';
 
@@ -620,7 +641,8 @@ async function openSubjectGrid() {
     );
   }
 
-  setContent(grid);
+  wrapper.appendChild(grid);
+  setContent(wrapper);
 }
 
 async function openSubject(subject) {
@@ -690,6 +712,7 @@ async function openNote(subject, lecture, backTo) {
       <div class="toolbar-spacer"></div>
       ${hasRaw ? `<button class="ghost-btn" id="note-rebuild-btn">${icon('file', 14)}<span>Пересобрать конспект</span></button>` : ''}
       ${hasRaw ? `<button class="ghost-btn" id="note-original-btn">${icon('mic', 14)}<span>Что записалось</span></button>` : ''}
+      <button class="ghost-btn" id="note-quiz-btn">${icon('help', 14)}<span>Проверь себя</span></button>
       <button class="ghost-btn" id="note-record-btn">${icon('mic', 14)}<span>Записать ещё</span></button>
       <button class="ghost-btn" id="note-edit-btn">${icon('pencil', 14)}<span>Изменить</span></button>
       <button class="ghost-btn" id="note-copy-btn">${icon('copy', 14)}<span>Копировать</span></button>
@@ -711,7 +734,11 @@ async function openNote(subject, lecture, backTo) {
   const editBtn = wrapper.querySelector('#note-edit-btn');
   const rebuildBtn = wrapper.querySelector('#note-rebuild-btn');
   const originalBtn = wrapper.querySelector('#note-original-btn');
+  const quizBtn = wrapper.querySelector('#note-quiz-btn');
   editorEl.value = markdown;
+
+  let showingQuiz = false;
+  let quizText = null;
 
   function setEditing(editing) {
     renderEl.style.display = editing ? 'none' : 'block';
@@ -720,19 +747,56 @@ async function openNote(subject, lecture, backTo) {
     editActionsEl.style.display = editing ? 'flex' : 'none';
     if (rebuildBtn) rebuildBtn.style.display = editing ? 'none' : 'inline-flex';
     if (originalBtn) originalBtn.style.display = editing ? 'none' : 'inline-flex';
+    quizBtn.style.display = editing ? 'none' : 'inline-flex';
   }
 
   function showNotes() {
     showingOriginal = false;
+    showingQuiz = false;
     renderEl.innerHTML = renderMarkdown(markdown) || '<p class="hint">Пока пусто.</p>';
     if (originalBtn) originalBtn.innerHTML = `${icon('mic', 14)}<span>Что записалось</span>`;
+    quizBtn.innerHTML = `${icon('help', 14)}<span>Проверь себя</span>`;
   }
 
   function showOriginal() {
     showingOriginal = true;
+    showingQuiz = false;
     renderEl.innerHTML = renderOriginalHtml();
     if (originalBtn) originalBtn.innerHTML = `${icon('file', 14)}<span>Показать конспект</span>`;
+    quizBtn.innerHTML = `${icon('help', 14)}<span>Проверь себя</span>`;
   }
+
+  async function showQuiz() {
+    if (showingQuiz) {
+      showNotes();
+      return;
+    }
+    showingOriginal = false;
+    showingQuiz = true;
+    if (originalBtn) originalBtn.innerHTML = `${icon('mic', 14)}<span>Что записалось</span>`;
+    if (quizText !== null) {
+      renderEl.innerHTML = renderMarkdown(quizText);
+      quizBtn.innerHTML = `${icon('file', 14)}<span>К конспекту</span>`;
+      return;
+    }
+    const original = quizBtn.innerHTML;
+    quizBtn.disabled = true;
+    quizBtn.innerHTML = `${rubyGemSvg(14)}<span>Готовлю тест…</span>`;
+    renderEl.innerHTML = `<p class="hint">Готовлю вопросы по конспекту…</p>`;
+    try {
+      quizText = await window.lectureApp.generateQuiz(subject, lecture.folderName);
+      renderEl.innerHTML = renderMarkdown(quizText);
+      quizBtn.innerHTML = `${icon('file', 14)}<span>К конспекту</span>`;
+    } catch (err) {
+      showingQuiz = false;
+      renderEl.innerHTML = `<p class="hint" style="color:var(--danger)">Не удалось собрать тест: ${escapeHtml(String(err.message || err))}</p>`;
+      quizBtn.innerHTML = original;
+    } finally {
+      quizBtn.disabled = false;
+    }
+  }
+
+  quizBtn.addEventListener('click', showQuiz);
 
   async function rebuildNotes() {
     if (!rebuildBtn) return;
@@ -743,9 +807,10 @@ async function openNote(subject, lecture, backTo) {
       markdown = await window.lectureApp.rebuildLectureNotes(subject, lecture.folderName);
       editorEl.value = markdown;
       lecture.notesFailed = false;
-      if (!showingOriginal) showNotes();
+      quizText = null; // stale now that the underlying notes changed
+      if (!showingOriginal && !showingQuiz) showNotes();
     } catch (err) {
-      if (!showingOriginal) {
+      if (!showingOriginal && !showingQuiz) {
         const raw = String(err.message || err);
         const message = /503|UNAVAILABLE|overloaded|высок(?:ий|ая) спрос/i.test(raw)
           ? 'Gemini сейчас перегружен — это временно. Попробуй пересобрать ещё раз через минуту.'
@@ -795,14 +860,33 @@ async function renderSearchResults() {
   libBackBtn.style.display = 'none';
   document.getElementById('lib-chat-btn').style.display = 'none';
 
-  const results = await window.lectureApp.searchLectures(searchInput.value.trim());
-  if (results.length === 0) {
+  const { subjects, lectures } = await window.lectureApp.searchLectures(searchInput.value.trim());
+  if (subjects.length === 0 && lectures.length === 0) {
     setContent(emptyState('Ничего не найдено.'));
     return;
   }
   const grid = document.createElement('div');
   grid.className = 'card-grid';
-  for (const lecture of results) {
+  for (const subject of subjects) {
+    const count = (await window.lectureApp.listLectures(subject)).length;
+    grid.appendChild(
+      subjectCard(subject, count, () => openSubject(subject), {
+        onRename: async () => {
+          const newName = await askText('Новое название предмета', subject);
+          if (!newName || newName === subject) return;
+          await window.lectureApp.renameSubject(subject, newName);
+          renderSearchResults();
+        },
+        onDelete: async () => {
+          const ok = await askConfirm('Удалить предмет?', `«${subject}» вместе со всеми лекциями внутри будет удалён без возможности восстановления.`);
+          if (!ok) return;
+          await window.lectureApp.deleteSubject(subject);
+          renderSearchResults();
+        },
+      })
+    );
+  }
+  for (const lecture of lectures) {
     grid.appendChild(lectureCard(lecture, lecture.subject, () => openNote(lecture.subject, lecture, 'search'), true));
   }
   setContent(grid);
@@ -889,12 +973,16 @@ function lectureCard(lecture, subject, onClick, showSubjectTag = false) {
   return card;
 }
 
-function pluralLectures(n) {
+function pluralForm(n, one, few, many) {
   const mod10 = n % 10;
   const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return 'лекция';
-  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return 'лекции';
-  return 'лекций';
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return few;
+  return many;
+}
+
+function pluralLectures(n) {
+  return pluralForm(n, 'лекция', 'лекции', 'лекций');
 }
 
 // --- Chat with AI, grounded in one subject's or one lecture's saved notes ---
@@ -1024,6 +1112,7 @@ settingsForm.addEventListener('submit', async (e) => {
     slideIntervalSec: Number(formData.get('slideIntervalSec')),
     toggleHotkey: formData.get('toggleHotkey'),
     callOutName: formData.get('callOutName').trim(),
+    markerPhrase: formData.get('markerPhrase').trim(),
   };
   await window.lectureApp.saveSettings(settings);
   settingsSaved.textContent = 'Сохранено. Хоткей применится после перезапуска приложения.';

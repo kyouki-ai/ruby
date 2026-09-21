@@ -190,6 +190,8 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 
 .transcript-line { color: var(--text-muted); margin-bottom: 8px; }
 .transcript-line .ts { color: var(--text-dim); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.transcript-line-marked { color: var(--text); border-left: 2px solid var(--accent); padding-left: 8px; margin-left: -10px; }
+.marker-star { color: var(--accent); margin-right: 5px; display: inline-flex; vertical-align: -1px; }
 
 .notes { color: var(--text); }
 .notes h2, .notes h3, .notes h4 { color: var(--text); font-weight: 600; margin: 18px 0 8px; }
@@ -371,6 +373,18 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   font-size: 13.5px;
 }
 .chat-input-row input:focus { outline: none; border-color: var(--accent); }
+
+.library-stats {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.library-stat { display: flex; flex-direction: column; gap: 2px; }
+.library-stat-num { font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; font-size: 24px; color: var(--accent); line-height: 1.1; }
+.library-stat-label { font-size: 12px; color: var(--text-dim); }
 
 .card-grid {
   display: grid;
@@ -670,6 +684,10 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 .onboarding-key-row input:focus { outline: none; border-color: var(--accent); }
 
 .onboarding-actions { display: flex; gap: 10px; margin-top: 18px; }
+/* .primary-btn defaults to align-self: flex-start (correct inside forms/toolbars),
+   but every other onboarding element is centered - without this override the
+   button was the one piece visibly stuck to the left. */
+.onboarding-step .primary-btn { align-self: center; }
 
 .onboarding-check {
   width: 52px;

@@ -26,6 +26,10 @@ export interface AppSettings {
   // notification fires when the teacher says it, in case the student didn't
   // hear being called on. Empty disables the feature.
   callOutName: string;
+  // A phrase the student says out loud during the lecture (e.g. "отметь
+  // это") to flag the current moment as important - picked up in the live
+  // transcript and called out in the final conspect. Empty disables it.
+  markerPhrase: string;
 }
 
 function defaultSettings(): AppSettings {
@@ -35,6 +39,7 @@ function defaultSettings(): AppSettings {
     libraryPath: defaultLibraryPath(),
     lastSubject: DEFAULT_SUBJECT,
     callOutName: '',
+    markerPhrase: '',
   };
 }
 

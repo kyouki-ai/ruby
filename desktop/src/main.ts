@@ -35,7 +35,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 import { WsServer, LectureSession } from './server/wsServer';
 import { AudioPipeline, TranscriptSegment } from './transcription/audioPipeline';
 import { SlidePipeline, SlideEntry } from './slides/slidePipeline';
-import { buildLectureNotes } from './gemini/notesBuilder';
+import { buildLectureNotes, generateQuizFromNotes, MarkedMoment } from './gemini/notesBuilder';
 import { setApiKeys, isApiKeyConfigured, streamChatReply } from './gemini/geminiClient';
 import { saveApiKey, loadApiKeys, clearApiKey } from './secrets';
 import * as library from './storage/libraryStore';
@@ -61,6 +61,7 @@ let currentSession: LectureSession | null = null;
 let transcript: TranscriptSegment[] = [];
 let slidePipeline: SlidePipeline = new SlidePipeline();
 let audioPipeline: AudioPipeline | null = null;
+let markedMoments: MarkedMoment[] = [];
 // If set, the next "stop" appends to this existing lecture instead of
 // creating a new one - picked via the "Лекция" dropdown on the Live tab.
 let targetLectureFolder: string | null = null;
@@ -194,6 +195,14 @@ function checkCallOut(segmentText: string): void {
   notification.show();
 }
 
+/** Checks a transcribed segment for the marker phrase and records it if found - returns whether it matched, so the live transcript can highlight that line too. */
+function checkMarker(segment: TranscriptSegment): boolean {
+  const phrase = settings.markerPhrase.trim();
+  if (!phrase || !containsWholeWord(segment.text, phrase)) return false;
+  markedMoments.push({ offsetSec: segment.startSec, text: segment.text });
+  return true;
+}
+
 /**
  * The structured conspect (headings/bullets, via Gemini) is only built once,
  * when the lecture stops - not continuously during recording. Rebuilding it
@@ -206,11 +215,13 @@ function checkCallOut(segmentText: string): void {
 function resetLectureState(): void {
   currentSession = null;
   transcript = [];
+  markedMoments = [];
   slidePipeline = new SlidePipeline();
   audioPipeline = new AudioPipeline({
     onSegment: (segment) => {
       transcript.push(segment);
-      sendToRenderer(channels.IPC_TRANSCRIPT_SEGMENT, segment);
+      const marked = checkMarker(segment);
+      sendToRenderer(channels.IPC_TRANSCRIPT_SEGMENT, { ...segment, marked });
       checkCallOut(segment.text);
     },
     onError: (err) => logError('Gemini transcription error', err),
@@ -288,7 +299,7 @@ async function finalizeSession(): Promise<void> {
   let markdown: string;
   let notesFailed = false;
   try {
-    markdown = await buildLectureNotes(transcript, slidePipeline.slides);
+    markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
   } catch (err) {
     logError('Failed to build notes via Gemini - saving raw transcript instead', err);
     // Never lose the recording just because the notes-building call failed
@@ -390,7 +401,7 @@ function setupIpcHandlers(): void {
     // steady trickle of live slide captures - rebuild immediately instead of
     // waiting for the usual debounce.
     try {
-      const markdown = await buildLectureNotes(transcript, slidePipeline.slides);
+      const markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
       sendToRenderer(channels.IPC_NOTES_UPDATED, markdown);
     } catch (err) {
       logError('Failed to rebuild notes after attaching file', err);
@@ -478,7 +489,7 @@ function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_DELETE_LECTURE, (_e, subject: string, folderName: string) =>
     library.deleteLecture(settings.libraryPath, subject, folderName)
   );
-  ipcMain.handle(channels.IPC_SEARCH_LECTURES, (_e, query: string) => library.searchLectures(settings.libraryPath, query));
+  ipcMain.handle(channels.IPC_SEARCH_LECTURES, (_e, query: string) => library.searchLibrary(settings.libraryPath, query));
 
   ipcMain.handle(channels.IPC_SET_CURRENT_SUBJECT, (_e, subject: string) => {
     settings.lastSubject = subject;
@@ -497,6 +508,18 @@ function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_REVEAL_LIBRARY_FOLDER, () => {
     library.ensureLibraryRoot(settings.libraryPath);
     shell.openPath(settings.libraryPath);
+  });
+
+  ipcMain.handle(channels.IPC_GET_LIBRARY_STATS, () => library.getLibraryStats(settings.libraryPath));
+
+  ipcMain.handle(channels.IPC_GENERATE_QUIZ, async (_e, subject: string, folderName: string) => {
+    const markdown = library.loadLectureMarkdown(settings.libraryPath, subject, folderName);
+    try {
+      return await generateQuizFromNotes(markdown);
+    } catch (err) {
+      logError('Failed to generate quiz', err);
+      throw err;
+    }
   });
 }
 

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import * as channels from './ipc/channels';
 import type { AppSettings } from './config';
-import type { LectureMeta, LectureRawMaterial } from './storage/libraryStore';
+import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults } from './storage/libraryStore';
 
 // Everything the renderer is allowed to touch. No direct Node/Electron
 // access is exposed - only this narrow, typed surface.
@@ -86,7 +86,7 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_RENAME_LECTURE, subject, folderName, newTitle),
   deleteLecture: (subject: string, folderName: string): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_DELETE_LECTURE, subject, folderName),
-  searchLectures: (query: string): Promise<LectureMeta[]> =>
+  searchLectures: (query: string): Promise<SearchResults> =>
     ipcRenderer.invoke(channels.IPC_SEARCH_LECTURES, query),
 
   setCurrentSubject: (subject: string): Promise<void> =>
@@ -95,4 +95,7 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_SET_RECORDING_TARGET, folderName),
   chooseLibraryFolder: (): Promise<string | null> => ipcRenderer.invoke(channels.IPC_CHOOSE_LIBRARY_FOLDER),
   revealLibraryFolder: (): Promise<void> => ipcRenderer.invoke(channels.IPC_REVEAL_LIBRARY_FOLDER),
+  getLibraryStats: (): Promise<LibraryStats> => ipcRenderer.invoke(channels.IPC_GET_LIBRARY_STATS),
+  generateQuiz: (subject: string, folderName: string): Promise<string> =>
+    ipcRenderer.invoke(channels.IPC_GENERATE_QUIZ, subject, folderName),
 });

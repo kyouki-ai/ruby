@@ -107,6 +107,31 @@ export function listLectures(libraryPath: string, subject: string): LectureMeta[
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
+export interface LibraryStats {
+  subjectCount: number;
+  lectureCount: number;
+  totalDurationSec: number;
+  lastActivityDate: string | null;
+}
+
+/** Aggregate counts for the "Мои предметы" dashboard - purely local, no extra Gemini calls. */
+export function getLibraryStats(libraryPath: string): LibraryStats {
+  const subjects = listSubjects(libraryPath);
+  let lectureCount = 0;
+  let totalDurationSec = 0;
+  let lastActivityDate: string | null = null;
+
+  for (const subject of subjects) {
+    for (const lecture of listLectures(libraryPath, subject)) {
+      lectureCount++;
+      totalDurationSec += lecture.durationSec;
+      if (!lastActivityDate || lecture.date > lastActivityDate) lastActivityDate = lecture.date;
+    }
+  }
+
+  return { subjectCount: subjects.length, lectureCount, totalDurationSec, lastActivityDate };
+}
+
 /** Every lecture's notes in a subject, concatenated for the AI chat's context (one lecture is just this with one entry). */
 export function buildChatContext(libraryPath: string, subject: string, onlyFolderName?: string): string {
   const lectures = listLectures(libraryPath, subject).filter((l) => !onlyFolderName || l.folderName === onlyFolderName);
@@ -131,20 +156,36 @@ export function buildFullLibraryContext(libraryPath: string): string {
     .join('\n\n===\n\n');
 }
 
-/** Searches lecture titles across every subject (case-insensitive substring match). */
-export function searchLectures(libraryPath: string, query: string): LectureMeta[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
+export interface SearchResults {
+  subjects: string[];
+  lectures: LectureMeta[];
+}
 
-  const results: LectureMeta[] = [];
-  for (const subject of listSubjects(libraryPath)) {
+/**
+ * Searches lecture titles and subject names (case-insensitive substring
+ * match). Subjects are matched and returned separately from lectures - a
+ * subject with zero lectures in it can't show up as a lecture result (there
+ * is no lecture to represent it), so without this a brand-new empty subject
+ * would be unfindable by search even though it's right there in the grid.
+ */
+export function searchLibrary(libraryPath: string, query: string): SearchResults {
+  const q = query.trim().toLowerCase();
+  if (!q) return { subjects: [], lectures: [] };
+
+  const allSubjects = listSubjects(libraryPath);
+  const subjects = allSubjects.filter((s) => s.toLowerCase().includes(q));
+
+  const lectures: LectureMeta[] = [];
+  for (const subject of allSubjects) {
     for (const lecture of listLectures(libraryPath, subject)) {
       if (lecture.title.toLowerCase().includes(q) || subject.toLowerCase().includes(q)) {
-        results.push(lecture);
+        lectures.push(lecture);
       }
     }
   }
-  return results.sort((a, b) => (a.date < b.date ? 1 : -1));
+  lectures.sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  return { subjects, lectures };
 }
 
 function readMeta(subjectDir: string, folderName: string, subject: string): LectureMeta | null {

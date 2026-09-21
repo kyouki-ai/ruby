@@ -66,3 +66,5 @@ export const IPC_SET_CURRENT_SUBJECT = 'set-current-subject';
 export const IPC_SET_RECORDING_TARGET = 'set-recording-target';
 export const IPC_CHOOSE_LIBRARY_FOLDER = 'choose-library-folder';
 export const IPC_REVEAL_LIBRARY_FOLDER = 'reveal-library-folder';
+export const IPC_GET_LIBRARY_STATS = 'get-library-stats';
+export const IPC_GENERATE_QUIZ = 'generate-quiz';
