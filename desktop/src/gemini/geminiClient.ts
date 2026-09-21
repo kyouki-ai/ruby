@@ -12,12 +12,14 @@
 // from Google's own error message, not a guess, so trust it over anything
 // written in a comment or doc from before this session.
 //
-// Transcription used to run on the "-lite" tier to conserve free-tier quota
-// (it's the most frequent call, once per recorded chunk) - the user chose
-// transcription accuracy over quota headroom instead, so it now shares the
-// stronger model with notes-building and chat. A day of back-to-back
-// lectures on one free key may hit the daily limit sooner as a result.
-const MODEL_HIGH_VOLUME = 'gemini-3.6-flash';
+// Briefly shared MODEL_SYNTHESIS for better transcription quality, but its
+// free-tier daily quota turned out to be just 20 requests/day/model (seen
+// directly in a real 429 response, not a guess) - shared across
+// transcription (by far the most frequent caller, once per ~30s chunk),
+// notes-building, chat and the quiz feature, that ran out within one short
+// conversation. Back to a separate, more generous quota bucket for the
+// high-volume path.
+const MODEL_HIGH_VOLUME = 'gemini-3.5-flash-lite';
 const MODEL_SYNTHESIS = 'gemini-3.6-flash';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
