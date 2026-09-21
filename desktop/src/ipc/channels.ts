@@ -73,3 +73,12 @@ export const IPC_CHOOSE_LIBRARY_FOLDER = 'choose-library-folder';
 export const IPC_REVEAL_LIBRARY_FOLDER = 'reveal-library-folder';
 export const IPC_GET_LIBRARY_STATS = 'get-library-stats';
 export const IPC_GENERATE_QUIZ = 'generate-quiz';
+
+// Named, persisted chat threads (see storage/chatStore.ts) - the chat used
+// to live only in renderer memory and vanished on every restart.
+export const IPC_LIST_CHAT_THREADS = 'list-chat-threads';
+export const IPC_CREATE_CHAT_THREAD = 'create-chat-thread';
+export const IPC_LOAD_CHAT_THREAD = 'load-chat-thread';
+export const IPC_RENAME_CHAT_THREAD = 'rename-chat-thread';
+export const IPC_DELETE_CHAT_THREAD = 'delete-chat-thread';
+export const IPC_FIND_OR_CREATE_LECTURE_THREAD = 'find-or-create-lecture-thread';

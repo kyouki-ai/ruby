@@ -21,6 +21,7 @@ const ICONS = {
   help: '<circle cx="9" cy="9" r="6.3"/><path d="M6.9 6.9a2.1 2.1 0 1 1 3 1.9c-.7.4-1.2.9-1.2 1.7v.3"/><circle cx="8.9" cy="12.7" r="0.15" fill="currentColor" stroke-width="0.8"/>',
   chat: '<path d="M3 4.5h12v8H8.5L5 15.5v-3H3z"/>',
   star: '<path d="M9 2.3l1.9 3.9 4.3.6-3.1 3 .7 4.3L9 12.1l-3.8 2 .7-4.3-3.1-3 4.3-.6Z"/>',
+  list: '<path d="M3.5 5h11M3.5 9h11M3.5 13h11"/>',
 };
 
 function icon(name, size = 18) {

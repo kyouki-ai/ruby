@@ -41,6 +41,7 @@ import { streamChatReply } from './ai/chatReply';
 import { setGroqApiKey, isGroqConfigured } from './groq/groqClient';
 import { saveApiKey, loadApiKeys, clearApiKey, saveGroqApiKey, loadGroqApiKey, clearGroqApiKey } from './secrets';
 import * as library from './storage/libraryStore';
+import * as chatStore from './storage/chatStore';
 import { loadSettings, saveSettings, AppSettings } from './config';
 import * as channels from './ipc/channels';
 import { logError } from './logger';
@@ -422,23 +423,45 @@ function setupIpcHandlers(): void {
     channels.IPC_CHAT_SEND,
     async (
       _e,
-      scope: { subject: string | null; folderName: string | null },
+      threadId: string,
       history: { role: 'user' | 'model'; text: string }[],
       message: string
     ) => {
-      const isGlobal = !scope.subject;
+      const thread = chatStore.loadChatThread(threadId);
+      if (!thread) throw new Error('Чат не найден - возможно, он был удалён.');
+      const isGlobal = !thread.subject;
       const context = isGlobal
         ? library.buildFullLibraryContext(settings.libraryPath)
-        : library.buildChatContext(settings.libraryPath, scope.subject!, scope.folderName ?? undefined);
+        : library.buildChatContext(settings.libraryPath, thread.subject!, thread.folderName ?? undefined);
       try {
-        return await streamChatReply(context, history, message, isGlobal, (delta) => {
+        const reply = await streamChatReply(context, history, message, isGlobal, (delta) => {
           sendToRenderer(channels.IPC_CHAT_STREAM_DELTA, delta);
         });
+        chatStore.saveChatMessages(threadId, [
+          ...history,
+          { role: 'user', text: message },
+          { role: 'model', text: reply },
+        ]);
+        return reply;
       } catch (err) {
         logError('Chat request failed', err);
         throw err;
       }
     }
+  );
+
+  // Named, persisted chat threads - see storage/chatStore.ts.
+  ipcMain.handle(channels.IPC_LIST_CHAT_THREADS, () => chatStore.listChatThreads());
+  ipcMain.handle(channels.IPC_CREATE_CHAT_THREAD, (_e, title: string) => chatStore.createChatThread(title));
+  ipcMain.handle(channels.IPC_LOAD_CHAT_THREAD, (_e, id: string) => chatStore.loadChatThread(id));
+  ipcMain.handle(channels.IPC_RENAME_CHAT_THREAD, (_e, id: string, title: string) =>
+    chatStore.renameChatThread(id, title)
+  );
+  ipcMain.handle(channels.IPC_DELETE_CHAT_THREAD, (_e, id: string) => chatStore.deleteChatThread(id));
+  ipcMain.handle(
+    channels.IPC_FIND_OR_CREATE_LECTURE_THREAD,
+    (_e, subject: string, folderName: string | null, title: string) =>
+      chatStore.findOrCreateLectureThread(subject, folderName, title)
   );
 
   // API key - each user pastes in their own free Gemini key here.

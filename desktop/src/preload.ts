@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import * as channels from './ipc/channels';
 import type { AppSettings } from './config';
 import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults } from './storage/libraryStore';
+import type { ChatThread, ChatThreadMeta } from './storage/chatStore';
 
 // Everything the renderer is allowed to touch. No direct Node/Electron
 // access is exposed - only this narrow, typed surface.
@@ -52,12 +53,22 @@ contextBridge.exposeInMainWorld('lectureApp', {
   remoteStopRecording: (): Promise<boolean> => ipcRenderer.invoke(channels.IPC_REMOTE_STOP_RECORDING),
 
   chatSend: (
-    scope: { subject: string | null; folderName: string | null },
+    threadId: string,
     history: { role: 'user' | 'model'; text: string }[],
     message: string
-  ): Promise<string> => ipcRenderer.invoke(channels.IPC_CHAT_SEND, scope, history, message),
+  ): Promise<string> => ipcRenderer.invoke(channels.IPC_CHAT_SEND, threadId, history, message),
   onChatStreamDelta: (cb: (delta: string) => void) =>
     ipcRenderer.on(channels.IPC_CHAT_STREAM_DELTA, (_e, delta) => cb(delta)),
+
+  listChatThreads: (): Promise<ChatThreadMeta[]> => ipcRenderer.invoke(channels.IPC_LIST_CHAT_THREADS),
+  createChatThread: (title: string): Promise<ChatThread> =>
+    ipcRenderer.invoke(channels.IPC_CREATE_CHAT_THREAD, title),
+  loadChatThread: (id: string): Promise<ChatThread | null> => ipcRenderer.invoke(channels.IPC_LOAD_CHAT_THREAD, id),
+  renameChatThread: (id: string, title: string): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_RENAME_CHAT_THREAD, id, title),
+  deleteChatThread: (id: string): Promise<void> => ipcRenderer.invoke(channels.IPC_DELETE_CHAT_THREAD, id),
+  findOrCreateLectureThread: (subject: string, folderName: string | null, title: string): Promise<ChatThread> =>
+    ipcRenderer.invoke(channels.IPC_FIND_OR_CREATE_LECTURE_THREAD, subject, folderName, title),
 
   getApiStatus: (): Promise<{ configured: boolean }> => ipcRenderer.invoke(channels.IPC_GET_API_STATUS),
   saveApiKey: (key: string): Promise<{ configured: boolean }> =>

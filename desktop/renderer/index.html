@@ -163,11 +163,16 @@
         <div class="library-toolbar">
           <button id="chat-back-btn" class="icon-btn-lg"></button>
           <h1 id="chat-title">Чат с ИИ</h1>
+          <div class="toolbar-spacer"></div>
+          <button id="chat-list-btn" class="ghost-btn" title="Все чаты"></button>
         </div>
-        <div id="chat-messages" class="chat-messages"></div>
-        <div class="chat-input-row">
-          <input id="chat-input" type="text" placeholder="Спроси про конспект..." />
-          <button id="chat-send-btn" class="primary-btn">Отправить</button>
+        <div id="chat-threads" class="library-content"></div>
+        <div id="chat-thread-view">
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input-row">
+            <input id="chat-input" type="text" placeholder="Спроси про конспект..." />
+            <button id="chat-send-btn" class="primary-btn">Отправить</button>
+          </div>
         </div>
       </section>
 

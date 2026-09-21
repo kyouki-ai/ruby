@@ -211,14 +211,14 @@ function switchToTab(tabName) {
 }
 
 function backToMainMode() {
-  if (lastMainMode === 'chat') openChat(chatScope, chatScope ? chatScope.subject : 'Все предметы');
+  if (lastMainMode === 'chat') switchToTab('chat');
   else {
     switchToTab('history');
     openSubjectGrid();
   }
 }
 
-document.getElementById('mode-chat-btn').addEventListener('click', () => openChat(null, 'Все предметы'));
+document.getElementById('mode-chat-btn').addEventListener('click', () => openChatThreadGrid());
 document.getElementById('mode-library-btn').addEventListener('click', () => {
   switchToTab('history');
   openSubjectGrid();
@@ -693,7 +693,10 @@ async function openSubject(subject) {
   const chatBtn = document.getElementById('lib-chat-btn');
   chatBtn.style.display = 'inline-flex';
   chatBtn.innerHTML = `${icon('chat', 14)}<span>Чат по предмету</span>`;
-  chatBtn.onclick = () => openChat({ subject, folderName: null }, subject);
+  chatBtn.onclick = async () => {
+    const thread = await window.lectureApp.findOrCreateLectureThread(subject, null, `Чат: ${subject}`);
+    openChatThread(thread.id, { backAction: () => openSubject(subject) });
+  };
 
   const lectures = await window.lectureApp.listLectures(subject);
 
@@ -721,7 +724,10 @@ async function openNote(subject, lecture, backTo) {
   const chatBtn = document.getElementById('lib-chat-btn');
   chatBtn.style.display = 'inline-flex';
   chatBtn.innerHTML = `${icon('chat', 14)}<span>Чат по лекции</span>`;
-  chatBtn.onclick = () => openChat({ subject, folderName: lecture.folderName }, lecture.title);
+  chatBtn.onclick = async () => {
+    const thread = await window.lectureApp.findOrCreateLectureThread(subject, lecture.folderName, `Чат: ${lecture.title}`);
+    openChatThread(thread.id, { backAction: () => openNote(subject, lecture, backTo) });
+  };
 
   let markdown = await window.lectureApp.loadLecture(subject, lecture.folderName);
   const raw = await window.lectureApp.loadLectureRaw(subject, lecture.folderName);
@@ -1042,27 +1048,135 @@ function pluralLectures(n) {
   return pluralForm(n, 'лекция', 'лекции', 'лекций');
 }
 
-// --- Chat with AI, grounded in one subject's or one lecture's saved notes ---
-let chatScope = null; // { subject, folderName: string|null }
-let chatHistory = []; // { role: 'user'|'model', text }
+// --- Chat with AI: named, persisted threads (storage/chatStore.ts on the
+// main side) instead of one in-memory conversation that vanished on every
+// restart. A thread is either general-purpose (user-named, e.g. "ДЗ") or
+// tied to a subject/lecture via "Чат по предмету/лекции". ---
+let currentThreadId = null;
+let chatHistory = []; // { role: 'user'|'model', text } - the currently open thread's messages
+let chatBackAction = null; // () => void, or null to hide the back button
+
+const chatThreadsEl = document.getElementById('chat-threads');
+const chatThreadViewEl = document.getElementById('chat-thread-view');
 
 document.getElementById('chat-back-btn').innerHTML = icon('chevronLeft', 18);
 document.getElementById('chat-back-btn').addEventListener('click', () => {
-  switchToTab('history');
-  if (chatScope) openSubject(chatScope.subject);
-  else openSubjectGrid();
+  if (chatBackAction) chatBackAction();
 });
+document.getElementById('chat-list-btn').innerHTML = `${icon('list', 14)}<span>Все чаты</span>`;
+document.getElementById('chat-list-btn').addEventListener('click', () => openChatThreadGrid());
 
-function openChat(scope, titleLabel) {
-  chatScope = scope;
-  chatHistory = [];
-  document.getElementById('chat-title').textContent = scope ? `Чат: ${titleLabel}` : 'Чат с ИИ';
-  document.getElementById('chat-back-btn').style.display = scope ? '' : 'none';
-  document.getElementById('chat-messages').innerHTML = scope
-    ? '<p class="hint">Спрашивай по конспекту, проси объяснить термин, составить вопросы для самопроверки и т.п.</p>'
-    : '<p class="hint">Спроси про любой предмет — например «какое дз по математике» — я сам найду нужный конспект.</p>';
+function setChatBack(action) {
+  chatBackAction = action;
+  document.getElementById('chat-back-btn').style.display = action ? '' : 'none';
+}
+
+function chatThreadCard(thread, onClick, { onRename, onDelete }) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-tile" style="background:var(--bg-active); color:var(--text-muted)">${icon('chat', 18)}</div>
+    <button class="card-menu-btn">${icon('more', 16)}</button>
+    <div class="card-title">${escapeHtml(thread.title)}</div>
+    <div class="card-meta">${thread.messageCount} ${pluralForm(thread.messageCount, 'сообщение', 'сообщения', 'сообщений')}</div>
+  `;
+  card.addEventListener('click', onClick);
+  card.querySelector('.card-menu-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMenu(e.currentTarget, [
+      { label: 'Переименовать', icon: 'pencil', onClick: onRename },
+      { label: 'Удалить', icon: 'trash', danger: true, onClick: onDelete },
+    ]);
+  });
+  return card;
+}
+
+async function openChatThreadGrid() {
   switchToTab('chat');
+  currentThreadId = null;
+  document.getElementById('chat-title').textContent = 'Чаты';
+  document.getElementById('chat-list-btn').style.display = 'none';
+  setChatBack(null);
+  chatThreadViewEl.style.display = 'none';
+  chatThreadsEl.style.display = '';
+
+  const threads = await window.lectureApp.listChatThreads();
+  const generalThreads = threads.filter((t) => !t.subject && !t.folderName);
+
+  const wrapper = document.createElement('div');
+  const grid = document.createElement('div');
+  grid.className = 'card-grid';
+  grid.appendChild(newCard('Новый чат', async () => {
+    const thread = await window.lectureApp.createChatThread('Новый чат');
+    openChatThread(thread.id, { backAction: openChatThreadGrid });
+  }));
+  for (const t of generalThreads) {
+    grid.appendChild(
+      chatThreadCard(t, () => openChatThread(t.id, { backAction: openChatThreadGrid }), {
+        onRename: async () => {
+          const newTitle = await askText('Новое название чата', t.title);
+          if (!newTitle || newTitle === t.title) return;
+          await window.lectureApp.renameChatThread(t.id, newTitle);
+          openChatThreadGrid();
+        },
+        onDelete: async () => {
+          const ok = await askConfirm('Удалить чат?', `«${t.title}» будет удалён без возможности восстановления.`);
+          if (!ok) return;
+          await window.lectureApp.deleteChatThread(t.id);
+          if (localStorage.getItem('lastChatThreadId') === t.id) localStorage.removeItem('lastChatThreadId');
+          openChatThreadGrid();
+        },
+      })
+    );
+  }
+  wrapper.appendChild(grid);
+  chatThreadsEl.innerHTML = '';
+  chatThreadsEl.appendChild(wrapper);
+}
+
+async function openChatThread(id, { backAction = openChatThreadGrid } = {}) {
+  const thread = await window.lectureApp.loadChatThread(id);
+  if (!thread) {
+    openChatThreadGrid();
+    return;
+  }
+  switchToTab('chat');
+  currentThreadId = id;
+  chatHistory = thread.messages.map((m) => ({ role: m.role, text: m.text }));
+  localStorage.setItem('lastChatThreadId', id);
+
+  document.getElementById('chat-title').textContent = thread.title;
+  document.getElementById('chat-list-btn').style.display = '';
+  setChatBack(backAction);
+  chatThreadsEl.style.display = 'none';
+  chatThreadViewEl.style.display = '';
+
+  const messagesEl = document.getElementById('chat-messages');
+  messagesEl.innerHTML = '';
+  if (chatHistory.length === 0) {
+    messagesEl.innerHTML =
+      thread.subject || thread.folderName
+        ? '<p class="hint">Спрашивай по конспекту, проси объяснить термин, составить вопросы для самопроверки и т.п.</p>'
+        : '<p class="hint">Спроси про любой предмет — например «какое дз по математике» — я сам найду нужный конспект.</p>';
+  } else {
+    for (const msg of chatHistory) appendChatBubble(msg.role, msg.text);
+  }
   document.getElementById('chat-input').focus();
+}
+
+/** Opens straight into a chat on launch (rather than a picker) - reopens the
+ * last-used general thread, falls back to any existing one, or creates a
+ * fresh "Общий чат" the first time the app is ever run. */
+async function initChat() {
+  const lastId = localStorage.getItem('lastChatThreadId');
+  let thread = lastId ? await window.lectureApp.loadChatThread(lastId) : null;
+  if (!thread) {
+    const threads = await window.lectureApp.listChatThreads();
+    const general = threads.filter((t) => !t.subject && !t.folderName);
+    thread = general.length > 0 ? await window.lectureApp.loadChatThread(general[0].id) : null;
+  }
+  if (!thread) thread = await window.lectureApp.createChatThread('Общий чат');
+  openChatThread(thread.id, { backAction: openChatThreadGrid });
 }
 
 function appendChatBubble(role, text) {
@@ -1089,11 +1203,24 @@ let streamingTicker = null;
 const REVEAL_CHARS_PER_TICK = 2;
 const REVEAL_INTERVAL_MS = 30;
 
+// Forcing scrollTop to the bottom on every single tick made it impossible to
+// scroll up and read earlier messages while a reply was still "typing" - the
+// view snapped right back down on the very next tick. Only auto-follow while
+// the user is already near the bottom (i.e. hasn't deliberately scrolled up
+// to read something else); once they scroll away, leave them alone until
+// they scroll back down themselves.
+const AUTO_SCROLL_THRESHOLD_PX = 80;
+
+function isNearBottom(el) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < AUTO_SCROLL_THRESHOLD_PX;
+}
+
 function renderRevealed() {
   if (!streamingBubble) return;
-  streamingBubble.innerHTML = renderMarkdown(streamingRevealed) || escapeHtml(streamingRevealed);
   const messagesEl = document.getElementById('chat-messages');
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  const shouldStickToBottom = isNearBottom(messagesEl);
+  streamingBubble.innerHTML = renderMarkdown(streamingRevealed) || escapeHtml(streamingRevealed);
+  if (shouldStickToBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 function startRevealTicker() {
@@ -1128,6 +1255,8 @@ window.lectureApp.onChatStreamDelta((delta) => {
 });
 
 async function sendChatMessage() {
+  if (!currentThreadId) return;
+  const threadId = currentThreadId;
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
   if (!message) return;
@@ -1143,8 +1272,7 @@ async function sendChatMessage() {
   streamingRaw = '';
   streamingRevealed = '';
   try {
-    const scope = chatScope || { subject: null, folderName: null };
-    const replyPromise = window.lectureApp.chatSend(scope, chatHistory, message);
+    const replyPromise = window.lectureApp.chatSend(threadId, chatHistory, message);
     startRevealTicker();
     const reply = await replyPromise;
     chatHistory.push({ role: 'user', text: message }, { role: 'model', text: reply });
@@ -1301,5 +1429,5 @@ async function initOnboarding() {
 }
 
 loadSettingsIntoForm();
-openChat(null, 'Все предметы');
+initChat();
 initOnboarding();
