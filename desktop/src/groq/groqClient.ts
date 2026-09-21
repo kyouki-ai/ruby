@@ -76,17 +76,42 @@ export async function transcribeWithGroq(wavBuffer: Buffer): Promise<string> {
   return (await response.text()).trim();
 }
 
+/** Groq's 429 body includes its own "Please try again in 21.9s" hint - use it instead of a blind guess. */
+function parseRetryDelayMs(errorText: string): number {
+  const match = errorText.match(/try again in ([\d.]+)\s*s/i);
+  return match ? Math.ceil(parseFloat(match[1]) * 1000) + 500 : 5000;
+}
+
+/**
+ * Groq's free tier limits tokens-per-minute, not just requests-per-day - a
+ * single large conspect rebuild can trip it on its own. That resets within
+ * seconds (the error names the exact wait), unlike Gemini's daily quota, so
+ * one retry after the hinted delay is worth doing automatically instead of
+ * making the user click the button again.
+ */
+async function postChatCompletion(body: Record<string, unknown>, timeoutMs: number): Promise<Response> {
+  if (!groqApiKey) throw new Error('Groq API key is not set.');
+  const send = () =>
+    fetch(GROQ_CHAT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+  let response = await send();
+  if (response.status === 429) {
+    const delayMs = parseRetryDelayMs(await response.text());
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    response = await send();
+  }
+  return response;
+}
+
 /** Plain one-shot text generation (notes-building, the quiz) - no chat history involved. */
 export async function generateTextWithGroq(prompt: string): Promise<string> {
-  if (!groqApiKey) throw new Error('Groq API key is not set.');
   const model = await resolveTextModel();
-
-  const response = await fetch(GROQ_CHAT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const response = await postChatCompletion({ model, messages: [{ role: 'user', content: prompt }] }, 30_000);
 
   if (!response.ok) {
     throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
@@ -105,15 +130,8 @@ export async function streamChatWithGroq(
   messages: GroqChatMessage[],
   onDelta: (text: string) => void
 ): Promise<string> {
-  if (!groqApiKey) throw new Error('Groq API key is not set.');
   const model = await resolveTextModel();
-
-  const response = await fetch(GROQ_CHAT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
-    body: JSON.stringify({ model, messages, stream: true }),
-    signal: AbortSignal.timeout(45_000),
-  });
+  const response = await postChatCompletion({ model, messages, stream: true }, 45_000);
 
   if (!response.ok || !response.body) {
     throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);

@@ -49,6 +49,7 @@ Produce a clean, well-organized markdown lecture summary:
 - Include a "[mm:ss]" timestamp next to each bullet pointing to where it was discussed.
 - Skip filler, small talk, and repeated words from the speech.
 - If slide content and speech overlap, merge them into one bullet instead of duplicating.
+- Write the notes in the same language the transcript is in - do not translate to English or any other language.
 ${markedMoments.length > 0 ? '- The student flagged some moments as important while recording (list below) - make sure each one is reflected in the notes, marked with "⭐" at the start of that bullet.' : ''}
 
 TRANSCRIPT:

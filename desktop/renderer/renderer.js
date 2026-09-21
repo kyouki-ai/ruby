@@ -852,7 +852,9 @@ async function openNote(subject, lecture, backTo) {
         const raw = String(err.message || err);
         const message = /503|UNAVAILABLE|overloaded|высок(?:ий|ая) спрос/i.test(raw)
           ? 'Gemini сейчас перегружен — это временно. Попробуй пересобрать ещё раз через минуту.'
-          : `Не удалось собрать конспект: ${raw}`;
+          : /429|rate.?limit/i.test(raw)
+            ? 'Groq на секунду ограничил скорость (лимит токенов в минуту) — это временно, попробуй пересобрать ещё раз через полминуты.'
+            : `Не удалось собрать конспект: ${raw}`;
         renderEl.innerHTML = `<p class="hint" style="color:var(--danger)">${escapeHtml(message)}</p>`;
       }
     } finally {
@@ -1055,17 +1057,57 @@ function appendChatBubble(role, text) {
   return bubble;
 }
 
-// Reply text streams in over IPC_CHAT_STREAM_DELTA as Gemini generates it -
-// only one chat send is ever in flight at a time (the send button is
-// disabled meanwhile), so a single "current bubble" is enough bookkeeping.
+// Reply text streams in over IPC_CHAT_STREAM_DELTA as it's generated, but
+// Groq in particular is fast enough that a whole short reply can arrive in
+// one or two deltas - real streaming, but too instant to actually look like
+// typing. `streamingRaw` tracks everything received so far; a separate
+// ticker reveals it onto the bubble at a fixed pace, decoupled from however
+// fast the network/model actually was, so it always reads like Ruby is
+// typing rather than teleporting in text.
 let streamingBubble = null;
-let streamingText = '';
-window.lectureApp.onChatStreamDelta((delta) => {
+let streamingRaw = '';
+let streamingRevealed = '';
+let streamingTicker = null;
+
+const REVEAL_CHARS_PER_TICK = 2;
+const REVEAL_INTERVAL_MS = 30;
+
+function renderRevealed() {
   if (!streamingBubble) return;
-  streamingText += delta;
-  streamingBubble.innerHTML = renderMarkdown(streamingText) || escapeHtml(streamingText);
+  streamingBubble.innerHTML = renderMarkdown(streamingRevealed) || escapeHtml(streamingRevealed);
   const messagesEl = document.getElementById('chat-messages');
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function startRevealTicker() {
+  stopRevealTicker();
+  streamingTicker = setInterval(() => {
+    if (streamingRevealed.length >= streamingRaw.length) return;
+    streamingRevealed = streamingRaw.slice(0, streamingRevealed.length + REVEAL_CHARS_PER_TICK);
+    renderRevealed();
+  }, REVEAL_INTERVAL_MS);
+}
+
+function stopRevealTicker() {
+  if (streamingTicker) {
+    clearInterval(streamingTicker);
+    streamingTicker = null;
+  }
+}
+
+/** Resolves once the on-screen reveal has caught up to the full reply text. */
+function waitForRevealToCatchUp() {
+  return new Promise((resolve) => {
+    (function check() {
+      if (streamingRevealed.length >= streamingRaw.length) resolve();
+      else setTimeout(check, REVEAL_INTERVAL_MS);
+    })();
+  });
+}
+
+window.lectureApp.onChatStreamDelta((delta) => {
+  if (!streamingBubble) return;
+  streamingRaw += delta;
 });
 
 async function sendChatMessage() {
@@ -1081,13 +1123,20 @@ async function sendChatMessage() {
   const sendBtn = document.getElementById('chat-send-btn');
   sendBtn.disabled = true;
   streamingBubble = thinkingBubble;
-  streamingText = '';
+  streamingRaw = '';
+  streamingRevealed = '';
   try {
     const scope = chatScope || { subject: null, folderName: null };
-    const reply = await window.lectureApp.chatSend(scope, chatHistory, message);
+    const replyPromise = window.lectureApp.chatSend(scope, chatHistory, message);
+    startRevealTicker();
+    const reply = await replyPromise;
     chatHistory.push({ role: 'user', text: message }, { role: 'model', text: reply });
+    streamingRaw = reply; // in case the final SSE frame lands after the promise resolves
+    await waitForRevealToCatchUp();
+    stopRevealTicker();
     thinkingBubble.innerHTML = renderMarkdown(reply) || escapeHtml(reply);
   } catch (err) {
+    stopRevealTicker();
     thinkingBubble.innerHTML = '<p class="hint" style="color:var(--danger)">Не удалось получить ответ. Попробуй ещё раз.</p>';
   } finally {
     streamingBubble = null;
