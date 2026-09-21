@@ -267,6 +267,35 @@ let wasRecordingConnected = false;
 // otherwise reads as "it forgot my recording" for however long Gemini takes.
 let isFinalizing = false;
 
+// A rough, non-authoritative countdown while the conspect is being built -
+// just enough to make "Собираю конспект..." look alive instead of a frozen
+// spinner, since Gemini/Groq calls typically land well inside this window.
+const FINALIZE_ESTIMATE_SEC = 15;
+let finalizingCountdownTimer = null;
+
+function finalizeCountdownHtml(secondsLeft) {
+  return secondsLeft > 0
+    ? `<p class="hint">${rubyGemSvg(13)} Собираю конспект… обычно занимает около ${FINALIZE_ESTIMATE_SEC} сек, осталось примерно ${secondsLeft}с.</p>`
+    : `<p class="hint">${rubyGemSvg(13)} Ещё немного — иногда занимает дольше обычного.</p>`;
+}
+
+function startFinalizingCountdown() {
+  stopFinalizingCountdown();
+  let secondsLeft = FINALIZE_ESTIMATE_SEC;
+  notesBox.innerHTML = finalizeCountdownHtml(secondsLeft);
+  finalizingCountdownTimer = setInterval(() => {
+    secondsLeft -= 1;
+    notesBox.innerHTML = finalizeCountdownHtml(secondsLeft);
+  }, 1000);
+}
+
+function stopFinalizingCountdown() {
+  if (finalizingCountdownTimer) {
+    clearInterval(finalizingCountdownTimer);
+    finalizingCountdownTimer = null;
+  }
+}
+
 window.lectureApp.onConnectionStatus((connected, tabTitle) => {
   statusDot.className = `dot ${connected ? 'dot-on' : 'dot-off'}`;
   statusText.textContent = connected ? `Запись: ${tabTitle || 'вкладка браузера'}` : 'Не подключено';
@@ -290,9 +319,10 @@ window.lectureApp.onConnectionStatus((connected, tabTitle) => {
   document.getElementById('stop-mic-btn').style.display = connected ? 'inline-flex' : 'none';
   document.getElementById('slide-preview').style.display = 'none';
   if (!connected) {
-    if (isFinalizing) notesBox.innerHTML = '<p class="hint">Собираю конспект…</p>';
+    if (isFinalizing) startFinalizingCountdown();
     return;
   }
+  stopFinalizingCountdown();
   transcriptBox.innerHTML = '';
   // The structured conspect is only built once, when recording stops (see
   // main.ts) - rebuilding it continuously would burn through Gemini's free
@@ -471,7 +501,7 @@ document.getElementById('stop-mic-btn').addEventListener('click', async () => {
   const original = btn.textContent;
   btn.textContent = 'Собираю конспект...';
   isFinalizing = true;
-  notesBox.innerHTML = '<p class="hint">Собираю конспект…</p>';
+  startFinalizingCountdown();
 
   // The button must never look permanently stuck: Gemini calls inside
   // finalizeSession already time out on their own (main process side), but
@@ -497,6 +527,7 @@ document.getElementById('stop-mic-btn').addEventListener('click', async () => {
     // back to the subjects list instead.
     if (isFinalizing) {
       isFinalizing = false;
+      stopFinalizingCountdown();
       switchToTab('history');
       openSubjectGrid();
     }
@@ -525,11 +556,17 @@ window.lectureApp.onTranscriptSegment((segment) => {
 });
 
 window.lectureApp.onNotesUpdated((markdown) => {
+  stopFinalizingCountdown();
   notesBox.innerHTML = renderMarkdown(markdown);
   notesBox.dataset.raw = markdown;
 });
 
 window.lectureApp.onSlidePreview(({ screenshotBase64, offsetSec }) => {
+  // The extension's tab-capture occasionally comes back empty/truncated
+  // (rate limits, a tab that briefly wasn't capturable) - showing that as a
+  // blank thumbnail looked broken, so just keep the last good preview
+  // instead of overwriting it with nothing.
+  if (!screenshotBase64 || screenshotBase64.length < 100) return;
   document.getElementById('slide-preview-img').src = `data:image/jpeg;base64,${screenshotBase64}`;
   document.getElementById('slide-preview-time').textContent = `Слайд · ${formatTimestamp(offsetSec)}`;
   document.getElementById('slide-preview').style.display = 'flex';
@@ -541,6 +578,7 @@ window.lectureApp.onLectureSaved((meta) => {
   // user was watching happen. Yanking them to the library view instead was
   // its own bug: it interrupts the result they were already looking at.
   isFinalizing = false;
+  stopFinalizingCountdown();
   const savedHint = document.getElementById('live-saved-hint');
   const openNoteBtn = document.getElementById('live-open-note-btn');
   savedHint.style.display = 'inline';

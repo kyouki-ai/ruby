@@ -14,6 +14,24 @@ const state = {
   mode: null,
 };
 
+// This worker can be evicted and restarted at any time (routinely after
+// ~30s idle) even mid-recording, which used to reset `state` back to its
+// defaults while the offscreen document kept right on capturing - silently
+// breaking slide screenshots (wrong/missing activeTabId) and remote-stop
+// (see the control-channel handler below) without anything actually
+// crashing. `chrome.storage.session` survives a worker restart within the
+// same browser session, so a fresh worker can recover what it was doing.
+function persistCaptureState() {
+  chrome.storage.session.set({
+    capturing: state.capturing,
+    activeTabId: state.activeTabId,
+    mode: state.mode,
+  });
+}
+chrome.storage.session.get(['capturing', 'activeTabId', 'mode']).then((saved) => {
+  Object.assign(state, saved);
+});
+
 // Always-on control connection to the desktop app (separate from the
 // audio-streaming socket the offscreen document opens only while actually
 // recording), so the app can tell this extension to start capturing without
@@ -34,11 +52,22 @@ function connectControlChannel() {
     } catch {
       return;
     }
-    if (msg.type === 'remote-start' && !state.capturing) {
-      startCapture(msg.mode).catch((err) => console.error('Remote start failed:', err));
+    // Gating on `state.capturing` used to mean a stop/start silently no-op'd
+    // whenever the background service worker had been evicted and restarted
+    // mid-recording (routine after ~30s idle) - a fresh worker's `state`
+    // resets to its defaults even though the offscreen document is still
+    // actually capturing, so `state.capturing` no longer reflects reality.
+    // `chrome.offscreen.hasDocument()` asks the real thing instead of this
+    // worker's possibly-stale memory of it.
+    if (msg.type === 'remote-start') {
+      chrome.offscreen.hasDocument().then((alreadyCapturing) => {
+        if (!alreadyCapturing) startCapture(msg.mode).catch((err) => console.error('Remote start failed:', err));
+      });
     }
-    if (msg.type === 'remote-stop' && state.capturing) {
-      stopCapture().catch((err) => console.error('Remote stop failed:', err));
+    if (msg.type === 'remote-stop') {
+      chrome.offscreen.hasDocument().then((capturing) => {
+        if (capturing) stopCapture().catch((err) => console.error('Remote stop failed:', err));
+      });
     }
   });
   // Short retry - a dropped control connection should look "instant" to
@@ -100,6 +129,7 @@ async function startCapture(mode) {
   state.capturing = true;
   state.mode = mode;
   state.error = null;
+  persistCaptureState();
 
   await chrome.runtime.sendMessage({
     type: 'start-capture',
@@ -117,6 +147,7 @@ async function stopCapture() {
   state.wsConnected = false;
   state.activeTabId = null;
   state.mode = null;
+  persistCaptureState();
 
   try {
     await chrome.runtime.sendMessage({ type: 'stop-capture' });
@@ -184,8 +215,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'capture-failed':
       state.capturing = false;
       state.wsConnected = false;
+      state.activeTabId = null;
       state.mode = null;
       state.error = message.message;
+      persistCaptureState();
       broadcastStatus();
       if (chrome.offscreen.hasDocument) {
         chrome.offscreen.hasDocument().then((has) => has && chrome.offscreen.closeDocument());

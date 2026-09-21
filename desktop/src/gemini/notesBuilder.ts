@@ -1,6 +1,12 @@
 import { generateText } from './geminiClient';
+import { generateTextWithGroq, isGroqConfigured } from '../groq/groqClient';
 import { TranscriptSegment } from '../transcription/audioPipeline';
 import { SlideEntry } from '../slides/slidePipeline';
+
+/** Routes to Groq when the user configured a key (see groqClient.ts), else Gemini as before. */
+function generateTextRouted(prompt: string): Promise<string> {
+  return isGroqConfigured() ? generateTextWithGroq(prompt) : generateText(prompt);
+}
 
 function formatTimestamp(sec: number): string {
   const m = Math.floor(sec / 60)
@@ -62,7 +68,7 @@ export async function buildLectureNotes(
   slides: SlideEntry[],
   markedMoments: MarkedMoment[] = []
 ): Promise<string> {
-  return generateText(buildPrompt(transcript, slides, markedMoments));
+  return generateTextRouted(buildPrompt(transcript, slides, markedMoments));
 }
 
 const QUIZ_PROMPT_PREFIX =
@@ -74,5 +80,5 @@ const QUIZ_PROMPT_PREFIX =
 
 /** A short self-check quiz generated from a saved lecture's notes - available any time after saving, not just once. */
 export function generateQuizFromNotes(markdown: string): Promise<string> {
-  return generateText(QUIZ_PROMPT_PREFIX + (markdown.trim() || '(конспект пуст)'));
+  return generateTextRouted(QUIZ_PROMPT_PREFIX + (markdown.trim() || '(конспект пуст)'));
 }

@@ -195,21 +195,27 @@ export interface ChatTurn {
   text: string;
 }
 
-function buildChatContents(contextMarkdown: string, history: ChatTurn[], newMessage: string, isGlobalScope: boolean) {
+/** Shared with the Groq chat path (see ai/chatReply.ts) so both providers get the exact same instructions. */
+export function buildChatSystemPrompt(contextMarkdown: string, isGlobalScope: boolean): string {
   const scopeInstruction = isGlobalScope
     ? 'Ниже — конспекты по ВСЕМ предметам студента, разделённые заголовками "# Предмет: …". ' +
       'Сам определи, какого предмета касается вопрос, и отвечай по нему, не смешивая с другими ' +
       '(если явно не попросят сравнить или дать сводку по всему).'
     : 'Ниже — конспекты по одному предмету/лекции, который сейчас открыт.';
 
-  const systemPrompt =
+  return (
     'Ты — учебный ассистент студента. ' +
     scopeInstruction +
     ' Отвечай на вопросы, помогай готовиться к зачётам и контрольным, объясняй термины, ' +
     'составляй по запросу тесты и списки вопросов для самопроверки. ' +
     'Опирайся в первую очередь на эти конспекты; если в них чего-то не хватает для ответа, ' +
     'можешь дополнить общими знаниями, но отметь, что это не из конспекта.\n\n' +
-    `КОНСПЕКТЫ:\n${contextMarkdown || '(конспектов пока нет)'}`;
+    `КОНСПЕКТЫ:\n${contextMarkdown || '(конспектов пока нет)'}`
+  );
+}
+
+function buildChatContents(contextMarkdown: string, history: ChatTurn[], newMessage: string, isGlobalScope: boolean) {
+  const systemPrompt = buildChatSystemPrompt(contextMarkdown, isGlobalScope);
 
   return [
     { role: 'user', parts: [{ text: systemPrompt }] },
