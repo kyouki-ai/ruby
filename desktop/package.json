@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "npm run build && electron .",
     "dev": "tsc -p tsconfig.json --watch",
-    "pack": "npm run build && electron-builder --dir",
+    "pack": "npm run build && electron-builder --dir && node scripts/set-exe-icon.js",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
@@ -39,7 +39,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon-ruby-v2.ico",
+      "icon": "assets/icon-ruby-v3.ico",
       "signAndEditExecutable": false
     }
   }
