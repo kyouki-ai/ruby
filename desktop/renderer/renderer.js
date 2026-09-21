@@ -748,6 +748,11 @@ async function openNote(subject, lecture, backTo) {
     <div class="note-view-head">
       <span class="note-meta">${dateStr}${durationStr}</span>
       <div class="toolbar-spacer"></div>
+      ${hasRaw ? `
+      <div class="detail-toggle" id="note-detail-toggle" title="Подробность при пересборке">
+        <button type="button" class="detail-toggle-btn active" data-level="concise">Кратко</button>
+        <button type="button" class="detail-toggle-btn" data-level="detailed">Подробно</button>
+      </div>` : ''}
       ${hasRaw ? `<button class="ghost-btn" id="note-rebuild-btn">${icon('file', 14)}<span>Пересобрать конспект</span></button>` : ''}
       ${hasRaw ? `<button class="ghost-btn" id="note-original-btn">${icon('mic', 14)}<span>Что записалось</span></button>` : ''}
       <button class="ghost-btn" id="note-quiz-btn">${icon('help', 14)}<span>Проверь себя</span></button>
@@ -773,10 +778,21 @@ async function openNote(subject, lecture, backTo) {
   const rebuildBtn = wrapper.querySelector('#note-rebuild-btn');
   const originalBtn = wrapper.querySelector('#note-original-btn');
   const quizBtn = wrapper.querySelector('#note-quiz-btn');
+  const detailToggle = wrapper.querySelector('#note-detail-toggle');
   editorEl.value = markdown;
 
   let showingQuiz = false;
   let quizText = null;
+  let selectedDetailLevel = 'concise';
+
+  if (detailToggle) {
+    detailToggle.querySelectorAll('.detail-toggle-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedDetailLevel = btn.dataset.level;
+        detailToggle.querySelectorAll('.detail-toggle-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      });
+    });
+  }
 
   function setEditing(editing) {
     renderEl.style.display = editing ? 'none' : 'block';
@@ -785,6 +801,7 @@ async function openNote(subject, lecture, backTo) {
     editActionsEl.style.display = editing ? 'flex' : 'none';
     if (rebuildBtn) rebuildBtn.style.display = editing ? 'none' : 'inline-flex';
     if (originalBtn) originalBtn.style.display = editing ? 'none' : 'inline-flex';
+    if (detailToggle) detailToggle.style.display = editing ? 'none' : 'flex';
     quizBtn.style.display = editing ? 'none' : 'inline-flex';
   }
 
@@ -842,7 +859,7 @@ async function openNote(subject, lecture, backTo) {
     rebuildBtn.disabled = true;
     rebuildBtn.innerHTML = `${rubyGemSvg(14)}<span>Собираю конспект…</span>`;
     try {
-      markdown = await window.lectureApp.rebuildLectureNotes(subject, lecture.folderName);
+      markdown = await window.lectureApp.rebuildLectureNotes(subject, lecture.folderName, selectedDetailLevel);
       editorEl.value = markdown;
       lecture.notesFailed = false;
       quizText = null; // stale now that the underlying notes changed

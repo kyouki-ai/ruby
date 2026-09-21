@@ -485,13 +485,16 @@ function setupIpcHandlers(): void {
   // (Re)builds the conspect from a saved lecture's original transcript/slides
   // - available any time after saving too, not just once at record-stop, so
   // a failed build (rate limit, timeout) or an unhappy result can be retried.
-  ipcMain.handle(channels.IPC_REBUILD_LECTURE_NOTES, async (_e, subject: string, folderName: string) => {
-    const raw = library.loadLectureRaw(settings.libraryPath, subject, folderName);
-    if (!raw) throw new Error('Для этой лекции не сохранена исходная запись - пересборка недоступна.');
-    const markdown = await buildLectureNotes(raw.transcript, raw.slides, [], settings.notesDetailLevel);
-    library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown, false);
-    return markdown;
-  });
+  ipcMain.handle(
+    channels.IPC_REBUILD_LECTURE_NOTES,
+    async (_e, subject: string, folderName: string, detailLevel?: AppSettings['notesDetailLevel']) => {
+      const raw = library.loadLectureRaw(settings.libraryPath, subject, folderName);
+      if (!raw) throw new Error('Для этой лекции не сохранена исходная запись - пересборка недоступна.');
+      const markdown = await buildLectureNotes(raw.transcript, raw.slides, [], detailLevel ?? settings.notesDetailLevel);
+      library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown, false);
+      return markdown;
+    }
+  );
   ipcMain.handle(channels.IPC_CREATE_LECTURE, (_e, subject: string, title: string) =>
     library.saveLecture(settings.libraryPath, subject, { title, sourceUrl: '', durationSec: 0, markdown: '' })
   );

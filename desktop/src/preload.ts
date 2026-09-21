@@ -81,8 +81,8 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_LOAD_LECTURE, subject, folderName),
   loadLectureRaw: (subject: string, folderName: string): Promise<LectureRawMaterial | null> =>
     ipcRenderer.invoke(channels.IPC_LOAD_LECTURE_RAW, subject, folderName),
-  rebuildLectureNotes: (subject: string, folderName: string): Promise<string> =>
-    ipcRenderer.invoke(channels.IPC_REBUILD_LECTURE_NOTES, subject, folderName),
+  rebuildLectureNotes: (subject: string, folderName: string, detailLevel?: AppSettings['notesDetailLevel']): Promise<string> =>
+    ipcRenderer.invoke(channels.IPC_REBUILD_LECTURE_NOTES, subject, folderName, detailLevel),
   createLecture: (subject: string, title: string): Promise<LectureMeta> =>
     ipcRenderer.invoke(channels.IPC_CREATE_LECTURE, subject, title),
   saveLectureMarkdown: (subject: string, folderName: string, markdown: string): Promise<void> =>
