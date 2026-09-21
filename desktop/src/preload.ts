@@ -64,6 +64,11 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_SAVE_API_KEY, key),
   clearApiKey: (): Promise<{ configured: boolean }> => ipcRenderer.invoke(channels.IPC_CLEAR_API_KEY),
 
+  getGroqApiStatus: (): Promise<{ configured: boolean }> => ipcRenderer.invoke(channels.IPC_GET_GROQ_API_STATUS),
+  saveGroqApiKey: (key: string): Promise<{ configured: boolean }> =>
+    ipcRenderer.invoke(channels.IPC_SAVE_GROQ_API_KEY, key),
+  clearGroqApiKey: (): Promise<{ configured: boolean }> => ipcRenderer.invoke(channels.IPC_CLEAR_GROQ_API_KEY),
+
   listSubjects: (): Promise<string[]> => ipcRenderer.invoke(channels.IPC_LIST_SUBJECTS),
   createSubject: (name: string): Promise<string> => ipcRenderer.invoke(channels.IPC_CREATE_SUBJECT, name),
   renameSubject: (oldName: string, newName: string): Promise<string> =>

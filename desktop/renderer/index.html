@@ -195,6 +195,22 @@
           </fieldset>
 
           <fieldset>
+            <legend>Groq API — для распознавания речи (необязательно)</legend>
+            <p class="hint">
+              Расшифровка звука — самый частый вызов ИИ за лекцию, и он может забирать себе весь дневной
+              лимит Gemini. Если вставить сюда ещё и бесплатный ключ Groq (<a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a>),
+              распознавание речи пойдёт через него, а Gemini останется свободен для конспекта, чата и теста.
+              Слайды по-прежнему обрабатывает Gemini — Groq для этого не подходит. Без ключа всё работает как раньше, просто на Gemini.
+            </p>
+            <div class="api-key-row">
+              <input id="groq-key-input" type="password" placeholder="Вставь свой Groq API-ключ (необязательно)" />
+              <button id="save-groq-key-btn" type="button" class="secondary-btn">Сохранить</button>
+              <button id="clear-groq-key-btn" type="button" class="ghost-btn">Убрать</button>
+            </div>
+            <span id="groq-key-status" class="hint"></span>
+          </fieldset>
+
+          <fieldset>
             <legend>Хранилище заметок</legend>
             <p class="hint">Все конспекты хранятся локально на этом компьютере, в обычных папках — их видно и без приложения.</p>
             <div class="api-key-row">

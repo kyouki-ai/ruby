@@ -48,6 +48,11 @@ export const IPC_GET_API_STATUS = 'get-api-status';
 export const IPC_SAVE_API_KEY = 'save-api-key';
 export const IPC_CLEAR_API_KEY = 'clear-api-key';
 
+// Groq key - optional, only used for audio transcription.
+export const IPC_GET_GROQ_API_STATUS = 'get-groq-api-status';
+export const IPC_SAVE_GROQ_API_KEY = 'save-groq-api-key';
+export const IPC_CLEAR_GROQ_API_KEY = 'clear-groq-api-key';
+
 // Library: subjects (folders) and lectures (sub-folders)
 export const IPC_LIST_SUBJECTS = 'list-subjects';
 export const IPC_CREATE_SUBJECT = 'create-subject';

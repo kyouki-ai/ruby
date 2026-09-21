@@ -1,4 +1,5 @@
 import { generateWithAudio } from './geminiClient';
+import { transcribeWithGroq, isGroqConfigured } from '../groq/groqClient';
 
 const TRANSCRIBE_PROMPT =
   'This is a ~30-second clip from a university lecture recording, possibly with background ' +
@@ -10,8 +11,15 @@ const TRANSCRIBE_PROMPT =
   'Output only the transcribed text, no commentary, no timestamps, no notes about audio quality. ' +
   'If there is no speech at all, output nothing.';
 
-/** Sends one ~12s WAV chunk to Gemini and returns the transcribed text (or ''). */
-export async function transcribeAudioChunk(wavBase64: string): Promise<string> {
-  const text = await generateWithAudio(TRANSCRIBE_PROMPT, wavBase64);
+/**
+ * Sends one ~30s WAV chunk off for transcription and returns the text (or
+ * '' for silence). Goes to Groq's free Whisper API when the user configured
+ * one (see groqClient.ts for why), otherwise falls back to Gemini exactly
+ * as before - configuring Groq is optional, not a second required key.
+ */
+export async function transcribeAudioChunk(wavBuffer: Buffer): Promise<string> {
+  const text = isGroqConfigured()
+    ? await transcribeWithGroq(wavBuffer)
+    : await generateWithAudio(TRANSCRIBE_PROMPT, wavBuffer.toString('base64'));
   return text.trim();
 }

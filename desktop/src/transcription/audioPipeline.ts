@@ -40,8 +40,7 @@ export class AudioPipeline {
     while (this.queue.length > 0) {
       const chunk = this.queue.shift()!;
       try {
-        const wavBase64 = buildWavBuffer(chunk.pcm).toString('base64');
-        const text = await transcribeAudioChunk(wavBase64);
+        const text = await transcribeAudioChunk(buildWavBuffer(chunk.pcm));
         if (text) {
           this.options.onSegment({
             startSec: chunk.startOffsetSec,

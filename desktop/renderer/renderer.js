@@ -1085,6 +1085,30 @@ document.getElementById('save-api-key-btn').addEventListener('click', async () =
   checkApiStatus();
 });
 
+const groqKeyInput = document.getElementById('groq-key-input');
+const groqKeyStatus = document.getElementById('groq-key-status');
+
+async function checkGroqApiStatus() {
+  const { configured } = await window.lectureApp.getGroqApiStatus();
+  groqKeyStatus.textContent = configured
+    ? 'Ключ сохранён — транскрипция идёт через Groq.'
+    : 'Ключ не задан — транскрипция идёт через Gemini, как обычно.';
+  groqKeyStatus.className = configured ? 'hint success' : 'hint';
+}
+
+document.getElementById('save-groq-key-btn').addEventListener('click', async () => {
+  const key = groqKeyInput.value.trim();
+  if (!key) return;
+  await window.lectureApp.saveGroqApiKey(key);
+  groqKeyInput.value = '';
+  checkGroqApiStatus();
+});
+
+document.getElementById('clear-groq-key-btn').addEventListener('click', async () => {
+  await window.lectureApp.clearGroqApiKey();
+  checkGroqApiStatus();
+});
+
 document.getElementById('choose-folder-btn').addEventListener('click', async () => {
   const chosen = await window.lectureApp.chooseLibraryFolder();
   if (chosen) libraryPathInput.value = chosen;
@@ -1166,6 +1190,7 @@ function dismissOnboarding() {
 
 async function initOnboarding() {
   apiKeyAlreadyConfigured = await checkApiStatus();
+  checkGroqApiStatus();
   showOnboardingStep('welcome');
   welcomeAutoAdvanceTimer = setTimeout(proceedFromWelcome, 1700);
 }

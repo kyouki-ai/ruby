@@ -51,3 +51,35 @@ export function loadApiKeys(): string[] {
 export function clearApiKey(): void {
   fs.rm(keyFilePath(), () => undefined);
 }
+
+/**
+ * Groq's free Whisper API is optional - only used for audio transcription
+ * (the highest-volume Gemini call) when configured, so a lecture's speech
+ * doesn't have to share Gemini's tight free-tier daily quota with notes
+ * building, chat and the quiz feature. A single key, same encrypted-at-rest
+ * treatment as the Gemini key.
+ */
+function groqKeyFilePath(): string {
+  return path.join(app.getPath('userData'), 'groq-key.enc');
+}
+
+export function saveGroqApiKey(rawInput: string): void {
+  const key = rawInput.trim();
+  const encrypted = safeStorage.encryptString(key);
+  fs.mkdirSync(path.dirname(groqKeyFilePath()), { recursive: true });
+  fs.writeFileSync(groqKeyFilePath(), encrypted);
+}
+
+export function loadGroqApiKey(): string | null {
+  try {
+    const encrypted = fs.readFileSync(groqKeyFilePath());
+    const decrypted = safeStorage.decryptString(encrypted);
+    return decrypted || null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearGroqApiKey(): void {
+  fs.rm(groqKeyFilePath(), () => undefined);
+}

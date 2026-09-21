@@ -37,7 +37,8 @@ import { AudioPipeline, TranscriptSegment } from './transcription/audioPipeline'
 import { SlidePipeline, SlideEntry } from './slides/slidePipeline';
 import { buildLectureNotes, generateQuizFromNotes, MarkedMoment } from './gemini/notesBuilder';
 import { setApiKeys, isApiKeyConfigured, streamChatReply } from './gemini/geminiClient';
-import { saveApiKey, loadApiKeys, clearApiKey } from './secrets';
+import { setGroqApiKey, isGroqConfigured } from './groq/groqClient';
+import { saveApiKey, loadApiKeys, clearApiKey, saveGroqApiKey, loadGroqApiKey, clearGroqApiKey } from './secrets';
 import * as library from './storage/libraryStore';
 import { loadSettings, saveSettings, AppSettings } from './config';
 import * as channels from './ipc/channels';
@@ -452,6 +453,19 @@ function setupIpcHandlers(): void {
     return { configured: isApiKeyConfigured() };
   });
 
+  // Groq key - optional, only for transcription (see groqClient.ts).
+  ipcMain.handle(channels.IPC_GET_GROQ_API_STATUS, () => ({ configured: isGroqConfigured() }));
+  ipcMain.handle(channels.IPC_SAVE_GROQ_API_KEY, (_e, key: string) => {
+    saveGroqApiKey(key);
+    setGroqApiKey(loadGroqApiKey());
+    return { configured: isGroqConfigured() };
+  });
+  ipcMain.handle(channels.IPC_CLEAR_GROQ_API_KEY, () => {
+    clearGroqApiKey();
+    setGroqApiKey(null);
+    return { configured: isGroqConfigured() };
+  });
+
   // Library: subjects and lectures, stored as plain folders on disk.
   ipcMain.handle(channels.IPC_LIST_SUBJECTS, () => library.listSubjects(settings.libraryPath));
   ipcMain.handle(channels.IPC_CREATE_SUBJECT, (_e, name: string) => library.createSubject(settings.libraryPath, name));
@@ -528,6 +542,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
 
   setApiKeys(loadApiKeys());
+  setGroqApiKey(loadGroqApiKey());
 
   createWindow();
   mainWindow?.show(); // open visibly on launch, like a normal app; tray/hotkey take over from there
