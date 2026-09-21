@@ -11,7 +11,10 @@
 
 const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_TEXT_MODEL = 'llama-3.3-70b-versatile';
+// llama-3.3-70b-versatile 404'd with "does not exist or you do not have
+// access to it" against a real free-tier key (straight from Groq's own
+// error, not a guess) - the smaller 8B model is the safer free-tier default.
+const GROQ_TEXT_MODEL = 'llama-3.1-8b-instant';
 
 let groqApiKey: string | null = null;
 
