@@ -1,0 +1,46 @@
+{
+  "name": "ai-lecture-notes-desktop",
+  "version": "0.1.0",
+  "description": "Offline AI lecture notetaker - Electron tray app",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "dev": "tsc -p tsconfig.json --watch",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2"
+  },
+  "build": {
+    "appId": "com.study.ai-lecture-notes",
+    "productName": "Ruby",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "../extension", "to": "extension" }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon-ruby-v2.ico",
+      "signAndEditExecutable": false
+    }
+  }
+}

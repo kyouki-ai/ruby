@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ruby</title>
+  <style>
+    body {
+      width: 260px;
+      margin: 0;
+      padding: 14px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0d0d0e;
+      color: #ececec;
+    }
+    h1 { font-size: 14px; margin: 0 0 10px; font-weight: 600; }
+    .status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a3a3a3; margin-bottom: 12px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #6e6e6e; }
+    .dot.on { background: #5cb98a; }
+    .dot.warn { background: #dba94c; }
+
+    .mode-list { display: flex; flex-direction: column; gap: 6px; }
+    .mode-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 9px 11px;
+      border: 1px solid #262627;
+      border-radius: 8px;
+      font-size: 12.5px;
+      cursor: pointer;
+      background: #171718;
+      color: #ececec;
+    }
+    .mode-btn:hover { background: #202021; }
+    .mode-btn .mode-title { font-weight: 600; display: block; }
+    .mode-btn .mode-desc { font-size: 11px; color: #a3a3a3; display: block; margin-top: 2px; }
+    .mode-btn.primary { background: #b3273e; border-color: #b3273e; color: #fff; }
+    .mode-btn.primary:hover { background: #9c2136; }
+    .mode-btn.primary .mode-desc { color: rgba(255, 255, 255, 0.8); }
+
+    #stop-view { display: none; }
+    #stop-btn {
+      width: 100%;
+      padding: 9px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      background: #e5604f;
+      color: white;
+    }
+    .active-mode { font-size: 12px; color: #a3a3a3; margin-bottom: 10px; }
+
+    .hint { font-size: 11px; color: #6e6e6e; margin-top: 10px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <h1>Ruby</h1>
+  <div class="status">
+    <span id="ws-dot" class="dot"></span>
+    <span id="ws-text">Приложение: проверка...</span>
+  </div>
+
+  <div id="start-view" class="mode-list">
+    <button class="mode-btn primary" data-mode="tab-slides">
+      <span class="mode-title">Вкладка: звук + слайды</span>
+      <span class="mode-desc">Онлайн-лекция в браузере — звук, скриншоты и текст слайдов</span>
+    </button>
+    <button class="mode-btn" data-mode="tab-audio-only">
+      <span class="mode-title">Вкладка: только звук</span>
+      <span class="mode-desc">Без слайдов — подкаст, запись без визуала</span>
+    </button>
+  </div>
+
+  <div id="stop-view">
+    <div class="active-mode" id="active-mode-text"></div>
+    <button id="stop-btn">Остановить</button>
+  </div>
+
+  <p class="hint">Лекция в аудитории без браузера? Кнопка «Начать запись с микрофона» есть прямо в приложении Ruby.</p>
+  <script src="popup.js"></script>
+</body>
+</html>

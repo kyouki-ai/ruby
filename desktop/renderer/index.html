@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';" />
+  <title>Ruby</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="onboarding" class="onboarding">
+    <div class="onboarding-step" data-step="welcome">
+      <img class="onboarding-mark" src="icon.png" alt="" />
+      <h1 class="onboarding-title">Ruby</h1>
+      <p class="onboarding-subtitle">Слушает лекцию в браузере и сама собирает конспект — заголовки, буллеты, таймкоды.</p>
+      <button class="primary-btn" id="welcome-next-btn">Начать</button>
+    </div>
+
+    <div class="onboarding-step" data-step="api-key">
+      <h2 class="onboarding-heading">Подключи бесплатный ИИ</h2>
+      <p class="onboarding-text">
+        Приложение расшифровывает речь и собирает конспект через Gemini API — бесплатно, свой ключ на каждого пользователя.
+      </p>
+      <ol class="onboarding-steps-list">
+        <li>Открой <b>aistudio.google.com/apikey</b> и войди с Google-аккаунтом.</li>
+        <li>Нажми «Create API key» — карта не нужна.</li>
+        <li>Скопируй ключ и вставь его сюда.</li>
+      </ol>
+      <a class="secondary-btn onboarding-open-link" href="https://aistudio.google.com/apikey" target="_blank">
+        Открыть aistudio.google.com/apikey
+      </a>
+      <div class="onboarding-key-row">
+        <input id="onboarding-key-input" type="password" placeholder="Вставь свой Gemini API-ключ" />
+      </div>
+      <span id="onboarding-error" class="hint" style="color:var(--danger)"></span>
+      <div class="onboarding-actions">
+        <button class="ghost-btn onboarding-skip">Пропустить</button>
+        <button class="primary-btn" id="onboarding-save-btn">Готово</button>
+      </div>
+    </div>
+
+    <div class="onboarding-step" data-step="done">
+      <div class="onboarding-check"></div>
+      <h2 class="onboarding-heading">Готово</h2>
+      <p class="onboarding-text">Ключ сохранён. Можно начинать первую лекцию.</p>
+    </div>
+  </div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-icon" src="icon.png" alt="" />
+        <span class="brand-name">Ruby</span>
+      </div>
+
+      <nav class="mode-switch">
+        <button class="mode-switch-btn active" id="mode-chat-btn" data-mode="chat">Чат</button>
+        <button class="mode-switch-btn" id="mode-library-btn" data-mode="history">Мои предметы</button>
+      </nav>
+
+      <div class="topbar-spacer"></div>
+
+      <div class="topbar-right">
+        <div class="status">
+          <span id="status-dot" class="dot dot-off"></span>
+          <span id="status-text">Не подключено</span>
+        </div>
+        <div id="api-key-banner" class="api-banner" style="display:none">Нужен API-ключ</div>
+        <button id="help-btn" class="icon-btn-lg" title="Как подключить расширение в браузере"></button>
+        <button id="settings-btn" class="icon-btn-lg" title="Настройки"></button>
+        <button id="theme-toggle-btn" class="icon-btn-lg" title="Сменить тему"></button>
+        <div class="window-controls">
+          <button id="win-minimize-btn" class="window-btn" title="Свернуть"></button>
+          <button id="win-maximize-btn" class="window-btn" title="Развернуть"></button>
+          <button id="win-close-btn" class="window-btn window-btn-close" title="Закрыть"></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section id="tab-live" class="tab-panel">
+        <div class="library-toolbar">
+          <button id="live-back-btn" class="icon-btn-lg"></button>
+          <h1 id="live-target-label">Запись</h1>
+        </div>
+
+        <div id="live-empty-state" class="live-empty-state">
+          <div class="setup-card setup-card-highlight setup-card-centered">
+            <span class="setup-card-tag">Без браузера</span>
+            <h3>Офлайн-лекция в аудитории</h3>
+            <p class="setup-card-desc">Ничего устанавливать не нужно — просто пиши микрофоном ноутбука.</p>
+            <button id="start-mic-btn" class="primary-btn"></button>
+            <span id="mic-error" class="hint" style="color:var(--danger)"></span>
+          </div>
+
+          <div id="browser-ready-card" class="setup-card setup-card-centered" style="display:none">
+            <span class="setup-card-tag">Расширение подключено</span>
+            <h3>Онлайн-лекция в браузере</h3>
+            <p class="setup-card-desc">Запусти запись прямо отсюда — открывать попап расширения не нужно.</p>
+            <button id="remote-start-slides-btn" class="primary-btn">Звук + слайды</button>
+            <button id="remote-start-audio-btn" class="secondary-btn" style="margin-top:8px">Только звук</button>
+            <span id="remote-action-error" class="hint" style="display:none; color:var(--danger); margin-top:8px"></span>
+            <p class="hint" style="margin-top:10px">
+              Звук пишется с этой вкладки, даже если переключишься на другую — можно спокойно смотреть YouTube
+              или играть в другой вкладке. А вот скриншоты слайдов снимаются с активной вкладки окна: если во
+              «Звук + слайды» переключишься на другую вкладку в этом же окне, слайды начнут сниматься с неё. Хочешь
+              параллельно заниматься другими делами — открой лекцию в отдельном окне браузера или выбери «Только звук».
+            </p>
+          </div>
+
+          <p id="browser-checking-hint" class="hint browser-checking-hint" style="display:none">
+            <span class="mini-spinner"></span> Проверяю подключение браузера…
+          </p>
+
+          <p id="browser-not-ready-hint" class="hint" style="display:none">
+            Онлайн-лекция в браузере? Загляни в
+            <a href="#" id="live-help-link">справку («?» вверху)</a> — как подключить расширение.
+          </p>
+        </div>
+
+        <div id="live-active-view" class="live-active-view" style="display:none">
+          <div class="live-toolbar">
+            <button id="attach-slide-btn" class="ghost-btn"></button>
+            <div id="slide-preview" class="slide-preview" style="display:none">
+              <img id="slide-preview-img" alt="" />
+              <span id="slide-preview-time" class="hint"></span>
+            </div>
+            <div class="toolbar-spacer"></div>
+            <span id="live-saved-hint" class="hint" style="display:none; color:var(--success)">Сохранено</span>
+            <button id="live-open-note-btn" class="ghost-btn" style="display:none">Открыть в конспектах</button>
+            <button id="stop-mic-btn" class="secondary-btn" style="display:none">Остановить запись</button>
+          </div>
+          <div class="split">
+            <div class="panel">
+              <div class="panel-head"><h2>Живой транскрипт</h2></div>
+              <div id="transcript" class="scroll-box"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <h2>Конспект</h2>
+                <button id="copy-btn" class="ghost-btn"></button>
+              </div>
+              <div id="notes" class="scroll-box notes"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-history" class="tab-panel">
+        <div class="library-toolbar">
+          <button id="lib-back-btn" class="icon-btn-lg" style="display:none"></button>
+          <h1 id="lib-title">Мои предметы</h1>
+          <button id="lib-chat-btn" class="ghost-btn" style="display:none"></button>
+          <div class="toolbar-spacer"></div>
+          <div class="search-box">
+            <span id="search-icon"></span>
+            <input id="search-input" type="search" placeholder="Поиск по лекциям и предметам" />
+          </div>
+        </div>
+        <div id="library-content" class="library-content"></div>
+      </section>
+
+      <section id="tab-chat" class="tab-panel active">
+        <div class="library-toolbar">
+          <button id="chat-back-btn" class="icon-btn-lg"></button>
+          <h1 id="chat-title">Чат с ИИ</h1>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input id="chat-input" type="text" placeholder="Спроси про конспект..." />
+          <button id="chat-send-btn" class="primary-btn">Отправить</button>
+        </div>
+      </section>
+
+      <section id="tab-settings" class="tab-panel">
+        <div class="library-toolbar">
+          <button id="settings-back-btn" class="icon-btn-lg"></button>
+          <h1 class="page-title">Настройки</h1>
+        </div>
+        <form id="settings-form" class="settings-form">
+          <fieldset>
+            <legend>Gemini API</legend>
+            <p class="hint">
+              ИИ работает через бесплатный облачный Gemini API — обработка идёт на серверах Google,
+              а не на этом ПК. Получи свой бесплатный ключ (без карты) на
+              <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>
+              и вставь ниже. Ключ хранится у тебя на диске в зашифрованном виде и никуда, кроме Google, не отправляется.
+              Если во время долгого дня лекций упрёшься в дневной лимит бесплатного тарифа — можно вставить сюда
+              ещё один бесплатный ключ через запятую, и приложение будет чередовать их.
+            </p>
+            <div class="api-key-row">
+              <input id="api-key-input" type="password" placeholder="Вставь свой Gemini API-ключ" />
+              <button id="save-api-key-btn" type="button" class="secondary-btn">Сохранить</button>
+            </div>
+            <span id="api-key-status" class="hint"></span>
+          </fieldset>
+
+          <fieldset>
+            <legend>Хранилище заметок</legend>
+            <p class="hint">Все конспекты хранятся локально на этом компьютере, в обычных папках — их видно и без приложения.</p>
+            <div class="api-key-row">
+              <input id="library-path-input" type="text" readonly />
+              <button id="choose-folder-btn" type="button" class="secondary-btn">Изменить</button>
+              <button id="reveal-folder-btn" type="button" class="secondary-btn">Открыть папку</button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Захват</legend>
+            <label>
+              Интервал захвата слайдов (сек)
+              <input type="number" name="slideIntervalSec" min="5" max="120" />
+            </label>
+            <label>
+              Глобальный хоткей окна
+              <input type="text" name="toggleHotkey" />
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Уведомление, если зовёт преподаватель</legend>
+            <p class="hint">
+              Если во время записи в речи прозвучит это имя — придёт уведомление на компьютер,
+              даже если окно свёрнуто. Полезно, если не расслышал, что тебя вызвали. Оставь пустым, чтобы отключить.
+            </p>
+            <label>
+              Имя/прозвище, по которому тебя зовут
+              <input type="text" name="callOutName" placeholder="Например: Никита" />
+            </label>
+          </fieldset>
+
+          <button type="submit" class="primary-btn">Сохранить</button>
+          <span id="settings-saved" class="hint"></span>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div id="modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h3 id="modal-title"></h3>
+      <p id="modal-message" class="hint"></p>
+      <input id="modal-input" type="text" />
+      <div class="modal-actions">
+        <button id="modal-cancel-btn" class="ghost-btn">Отмена</button>
+        <button id="modal-ok-btn" class="primary-btn">ОК</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="help-modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal-box modal-box-wide">
+      <div class="modal-box-head">
+        <h3>Как подключить расширение в браузере</h3>
+        <button id="help-close-btn" class="icon-btn-lg"></button>
+      </div>
+      <p class="hint">Один раз — нужно для онлайн-лекций со слайдами на экране. Для офлайн-лекций это не нужно вовсе.</p>
+
+      <div class="setup-step">
+        <span class="setup-step-num">1</span>
+        <div>
+          <p>Открой в Chrome страницу настроек расширений.</p>
+          <button id="copy-chrome-url-btn" class="secondary-btn">Скопировать адрес страницы</button>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="setup-step-num">2</span>
+        <p>Вставь адрес в браузер и включи переключатель <b>«Режим разработчика»</b> справа вверху.</p>
+      </div>
+      <div class="setup-step">
+        <span class="setup-step-num">3</span>
+        <div>
+          <p>Нажми <b>«Загрузить распакованное расширение»</b> и выбери папку, которая откроется по кнопке ниже.</p>
+          <button id="open-extension-folder-btn" class="secondary-btn">Открыть папку с расширением</button>
+        </div>
+      </div>
+
+      <p class="hint" style="margin-top:14px"><b>Каждый раз:</b> открой лекцию в браузере → нажми на иконку расширения → выбери, что записывать.</p>
+    </div>
+  </div>
+
+  <script src="icons.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

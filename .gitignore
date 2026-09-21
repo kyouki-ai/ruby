@@ -1,0 +1,23 @@
+node_modules/
+dist/
+out/
+build/
+*.log
+npm-debug.log*
+
+# Electron packaging output
+desktop/release/
+
+# Saved lecture sessions (user data, not source)
+desktop/userdata-sample/
+*.wav
+*.tmp
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local env
+.env
