@@ -108,16 +108,33 @@ async function postChatCompletion(body: Record<string, unknown>, timeoutMs: numb
   return response;
 }
 
+export interface GroqResult {
+  text: string;
+  /** True when Groq stopped only because it hit max_tokens, not because it was actually done. */
+  truncated: boolean;
+}
+
 /** Plain one-shot text generation (notes-building, the quiz) - no chat history involved. */
-export async function generateTextWithGroq(prompt: string): Promise<string> {
+export async function generateTextWithGroq(prompt: string, maxTokens?: number): Promise<string> {
+  return (await generateTextWithGroqFinish(prompt, maxTokens)).text;
+}
+
+/** Same as generateTextWithGroq, but also reports whether the response was cut off by max_tokens (see notesBuilder.ts's continuation loop). */
+export async function generateTextWithGroqFinish(prompt: string, maxTokens?: number): Promise<GroqResult> {
   const model = await resolveTextModel();
-  const response = await postChatCompletion({ model, messages: [{ role: 'user', content: prompt }] }, 30_000);
+  const response = await postChatCompletion(
+    { model, messages: [{ role: 'user', content: prompt }], ...(maxTokens ? { max_tokens: maxTokens } : {}) },
+    30_000
+  );
 
   if (!response.ok) {
     throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
   }
-  const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
-  return data.choices?.[0]?.message?.content ?? '';
+  const data = (await response.json()) as {
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
+  };
+  const choice = data.choices?.[0];
+  return { text: choice?.message?.content ?? '', truncated: choice?.finish_reason === 'length' };
 }
 
 export interface GroqChatMessage {

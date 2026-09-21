@@ -256,6 +256,21 @@
             </label>
           </fieldset>
 
+          <fieldset>
+            <legend>Подробность конспекта</legend>
+            <p class="hint">
+              «Кратко» — сжатые буллеты по ключевым мыслям (по умолчанию). «Подробно» — развёрнутый
+              конспект почти на весь материал лекции, вплоть до ~10 страниц, с полными объяснениями,
+              а не короткими пунктами. Занимает больше времени на сборку.
+            </p>
+            <label>
+              <select name="notesDetailLevel">
+                <option value="concise">Кратко</option>
+                <option value="detailed">Подробно</option>
+              </select>
+            </label>
+          </fieldset>
+
           <button type="submit" class="primary-btn">Сохранить</button>
           <span id="settings-saved" class="hint"></span>
         </form>

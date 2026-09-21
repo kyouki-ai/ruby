@@ -301,7 +301,7 @@ async function finalizeSession(): Promise<void> {
   let markdown: string;
   let notesFailed = false;
   try {
-    markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
+    markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments, settings.notesDetailLevel);
   } catch (err) {
     logError('Failed to build notes via Gemini - saving raw transcript instead', err);
     // Never lose the recording just because the notes-building call failed
@@ -403,7 +403,7 @@ function setupIpcHandlers(): void {
     // steady trickle of live slide captures - rebuild immediately instead of
     // waiting for the usual debounce.
     try {
-      const markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
+      const markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments, settings.notesDetailLevel);
       sendToRenderer(channels.IPC_NOTES_UPDATED, markdown);
     } catch (err) {
       logError('Failed to rebuild notes after attaching file', err);
@@ -488,7 +488,7 @@ function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_REBUILD_LECTURE_NOTES, async (_e, subject: string, folderName: string) => {
     const raw = library.loadLectureRaw(settings.libraryPath, subject, folderName);
     if (!raw) throw new Error('Для этой лекции не сохранена исходная запись - пересборка недоступна.');
-    const markdown = await buildLectureNotes(raw.transcript, raw.slides);
+    const markdown = await buildLectureNotes(raw.transcript, raw.slides, [], settings.notesDetailLevel);
     library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown, false);
     return markdown;
   });

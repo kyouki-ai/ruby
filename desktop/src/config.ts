@@ -30,6 +30,11 @@ export interface AppSettings {
   // это") to flag the current moment as important - picked up in the live
   // transcript and called out in the final conspect. Empty disables it.
   markerPhrase: string;
+  // 'concise' (default) asks for a condensed bullet summary; 'detailed' asks
+  // for a thorough, long-form writeup that keeps explanations and examples
+  // instead of compressing everything to bullets - for whoever wants a
+  // conspect closer to a full document than a cheat sheet.
+  notesDetailLevel: 'concise' | 'detailed';
 }
 
 function defaultSettings(): AppSettings {
@@ -40,6 +45,7 @@ function defaultSettings(): AppSettings {
     lastSubject: DEFAULT_SUBJECT,
     callOutName: '',
     markerPhrase: '',
+    notesDetailLevel: 'concise',
   };
 }
 

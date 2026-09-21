@@ -62,7 +62,13 @@ function nextKey(): string {
 
 const RETRYABLE_STATUS = new Set([429, 503]);
 
-async function callGemini(model: string, contents: unknown[]): Promise<string> {
+export interface GeminiResult {
+  text: string;
+  /** True when Gemini stopped only because it hit maxOutputTokens, not because it was actually done. */
+  truncated: boolean;
+}
+
+async function callGemini(model: string, contents: unknown[], maxOutputTokens?: number): Promise<GeminiResult> {
   const maxAttempts = Math.max(3, keyPool().length);
   let lastError: Error = new Error('Gemini request failed');
 
@@ -80,7 +86,10 @@ async function callGemini(model: string, contents: unknown[]): Promise<string> {
           'Content-Type': 'application/json',
           'x-goog-api-key': apiKey,
         },
-        body: JSON.stringify({ contents }),
+        body: JSON.stringify({
+          contents,
+          ...(maxOutputTokens ? { generationConfig: { maxOutputTokens } } : {}),
+        }),
         // A hung request must not be able to block finalizing a lecture for
         // long - 20s, not 45s: a normal reply takes a few seconds, and the
         // "Собираю конспект..." button feeling stuck matters more than
@@ -94,9 +103,13 @@ async function callGemini(model: string, contents: unknown[]): Promise<string> {
 
     if (response.ok) {
       const data = (await response.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
+        candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
       };
-      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const candidate = data.candidates?.[0];
+      return {
+        text: candidate?.content?.parts?.[0]?.text ?? '',
+        truncated: candidate?.finishReason === 'MAX_TOKENS',
+      };
     }
 
     lastError = new Error(`Gemini request failed: ${response.status} ${await response.text()}`);
@@ -173,21 +186,35 @@ function singleTurnContents(promptText: string, inlineParts: InlinePart[]): unkn
   return [{ parts }];
 }
 
-export function generateText(prompt: string): Promise<string> {
-  return callGemini(MODEL_SYNTHESIS, singleTurnContents(prompt, []));
+export function generateText(prompt: string, maxOutputTokens?: number): Promise<string> {
+  return callGemini(MODEL_SYNTHESIS, singleTurnContents(prompt, []), maxOutputTokens).then((r) => r.text);
+}
+
+/**
+ * Same as generateText, but also reports whether Gemini stopped only because
+ * it ran out of maxOutputTokens rather than actually finishing - lets a
+ * caller that needs a long document (see notesBuilder.ts) detect a cut-off
+ * response and ask for a continuation instead of silently truncating it.
+ */
+export function generateTextWithFinish(prompt: string, maxOutputTokens?: number): Promise<GeminiResult> {
+  return callGemini(MODEL_SYNTHESIS, singleTurnContents(prompt, []), maxOutputTokens);
 }
 
 export function generateWithAudio(prompt: string, wavBase64: string): Promise<string> {
-  return callGemini(MODEL_HIGH_VOLUME, singleTurnContents(prompt, [{ mimeType: 'audio/wav', base64Data: wavBase64 }]));
+  return callGemini(MODEL_HIGH_VOLUME, singleTurnContents(prompt, [{ mimeType: 'audio/wav', base64Data: wavBase64 }])).then(
+    (r) => r.text
+  );
 }
 
 export function generateWithImage(prompt: string, jpegBase64: string): Promise<string> {
-  return callGemini(MODEL_SYNTHESIS, singleTurnContents(prompt, [{ mimeType: 'image/jpeg', base64Data: jpegBase64 }]));
+  return callGemini(MODEL_SYNTHESIS, singleTurnContents(prompt, [{ mimeType: 'image/jpeg', base64Data: jpegBase64 }])).then(
+    (r) => r.text
+  );
 }
 
 /** For an attached slide deck file - Gemini reads PDFs and images natively, page by page. */
 export function generateWithDocument(prompt: string, base64Data: string, mimeType: string): Promise<string> {
-  return callGemini(MODEL_SYNTHESIS, singleTurnContents(prompt, [{ mimeType, base64Data }]));
+  return callGemini(MODEL_SYNTHESIS, singleTurnContents(prompt, [{ mimeType, base64Data }])).then((r) => r.text);
 }
 
 export interface ChatTurn {
@@ -238,7 +265,9 @@ export function generateChatReply(
   newMessage: string,
   isGlobalScope: boolean
 ): Promise<string> {
-  return callGemini(MODEL_SYNTHESIS, buildChatContents(contextMarkdown, history, newMessage, isGlobalScope));
+  return callGemini(MODEL_SYNTHESIS, buildChatContents(contextMarkdown, history, newMessage, isGlobalScope)).then(
+    (r) => r.text
+  );
 }
 
 /** Same as generateChatReply, but "types out" the reply via onDelta as it streams in. */

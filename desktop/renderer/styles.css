@@ -250,7 +250,7 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 
 .settings-form { display: flex; flex-direction: column; gap: 16px; max-width: 520px; overflow-y: auto; }
 .settings-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-muted); }
-.settings-form input {
+.settings-form input, .settings-form select {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -258,7 +258,7 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   padding: 7px 9px;
   font-size: 13px;
 }
-.settings-form input:focus { outline: none; border-color: var(--accent); }
+.settings-form input:focus, .settings-form select:focus { outline: none; border-color: var(--accent); }
 
 .hint { font-size: 12.5px; color: var(--text-dim); line-height: 1.55; }
 .hint.success { color: var(--success); }
