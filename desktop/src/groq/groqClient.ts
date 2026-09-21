@@ -11,19 +11,48 @@
 
 const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
-// llama-3.3-70b-versatile 404'd with "does not exist or you do not have
-// access to it" against a real free-tier key (straight from Groq's own
-// error, not a guess) - the smaller 8B model is the safer free-tier default.
-const GROQ_TEXT_MODEL = 'llama-3.1-8b-instant';
+const GROQ_MODELS_URL = 'https://api.groq.com/openai/v1/models';
 
 let groqApiKey: string | null = null;
+// Two different guessed model names ("llama-3.3-70b-versatile", then
+// "llama-3.1-8b-instant") both 404'd with "does not exist or you do not have
+// access to it" on the same key - guessing a third name isn't worth trying
+// again. Instead, ask Groq's own /models endpoint what this specific
+// account can actually use, once per key, and go with that.
+let cachedTextModel: string | null = null;
 
 export function setGroqApiKey(key: string | null): void {
   groqApiKey = key && key.trim() ? key.trim() : null;
+  cachedTextModel = null;
 }
 
 export function isGroqConfigured(): boolean {
   return groqApiKey !== null;
+}
+
+async function resolveTextModel(): Promise<string> {
+  if (cachedTextModel) return cachedTextModel;
+  if (!groqApiKey) throw new Error('Groq API key is not set.');
+
+  const response = await fetch(GROQ_MODELS_URL, { headers: { Authorization: `Bearer ${groqApiKey}` } });
+  if (!response.ok) {
+    throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
+  }
+  const data = (await response.json()) as { data?: { id: string }[] };
+  const ids = (data.data ?? []).map((m) => m.id);
+
+  // Skip anything that isn't a text chat model (Whisper, TTS, moderation/guard models).
+  const candidates = ids.filter((id) => !/whisper|tts|guard|moderation|prompt-guard/i.test(id));
+  const preferred =
+    candidates.find((id) => /llama-3\.[13]-(70b|8b)/i.test(id)) ??
+    candidates.find((id) => /llama/i.test(id)) ??
+    candidates[0];
+
+  if (!preferred) {
+    throw new Error(`Groq: this account has no usable chat model (models seen: ${ids.join(', ') || 'none'}).`);
+  }
+  cachedTextModel = preferred;
+  return preferred;
 }
 
 export async function transcribeWithGroq(wavBuffer: Buffer): Promise<string> {
@@ -50,11 +79,12 @@ export async function transcribeWithGroq(wavBuffer: Buffer): Promise<string> {
 /** Plain one-shot text generation (notes-building, the quiz) - no chat history involved. */
 export async function generateTextWithGroq(prompt: string): Promise<string> {
   if (!groqApiKey) throw new Error('Groq API key is not set.');
+  const model = await resolveTextModel();
 
   const response = await fetch(GROQ_CHAT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
-    body: JSON.stringify({ model: GROQ_TEXT_MODEL, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
     signal: AbortSignal.timeout(30_000),
   });
 
@@ -76,11 +106,12 @@ export async function streamChatWithGroq(
   onDelta: (text: string) => void
 ): Promise<string> {
   if (!groqApiKey) throw new Error('Groq API key is not set.');
+  const model = await resolveTextModel();
 
   const response = await fetch(GROQ_CHAT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
-    body: JSON.stringify({ model: GROQ_TEXT_MODEL, messages, stream: true }),
+    body: JSON.stringify({ model, messages, stream: true }),
     signal: AbortSignal.timeout(45_000),
   });
 
