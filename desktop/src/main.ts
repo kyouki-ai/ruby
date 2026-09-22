@@ -34,7 +34,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 import { WsServer, LectureSession } from './server/wsServer';
 import { AudioPipeline, TranscriptSegment } from './transcription/audioPipeline';
-import { SlidePipeline, SlideEntry } from './slides/slidePipeline';
+import { SlidePipeline, SlideEntry, describePhoto } from './slides/slidePipeline';
 import {
   buildLectureNotes,
   generateQuizFromNotes,
@@ -697,19 +697,50 @@ function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_LIST_LECTURE_PHOTOS, (_e, subject: string, folderName: string) =>
     library.listLecturePhotos(settings.libraryPath, subject, folderName)
   );
+  // Attaching a photo also feeds it into the conspect, same as attaching a
+  // slide file live during recording (IPC_ATTACH_SLIDE_FILE) - the whole
+  // point is covering slides shot on a phone during a mic-only recording,
+  // so the AI needs to actually see them, not just store them as a gallery.
   ipcMain.handle(channels.IPC_ADD_LECTURE_PHOTOS, async (_e, subject: string, folderName: string) => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Фото', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
     });
-    if (result.canceled) return [];
-    const added: string[] = [];
-    for (const filePath of result.filePaths) {
+    if (result.canceled) return { fileNames: [], markdown: null };
+
+    const raw = library.loadLectureRaw(settings.libraryPath, subject, folderName) ?? { transcript: [], slides: [] };
+    const lastOffset = raw.transcript.length > 0 ? raw.transcript[raw.transcript.length - 1].endSec : 0;
+
+    const fileNames: string[] = [];
+    for (let i = 0; i < result.filePaths.length; i++) {
+      const filePath = result.filePaths[i];
       const ext = path.extname(filePath).slice(1).toLowerCase() || 'jpg';
       const base64Data = fs.readFileSync(filePath).toString('base64');
-      added.push(library.addLecturePhoto(settings.libraryPath, subject, folderName, base64Data, ext));
+      fileNames.push(library.addLecturePhoto(settings.libraryPath, subject, folderName, base64Data, ext));
+
+      // One Gemini call per photo (never all of them in a single request),
+      // and paced a bit - a big batch fired all at once is exactly what
+      // trips the free-tier rate limit, even though each call already
+      // retries with backoff/key-rotation (see geminiClient's callGemini).
+      if (i > 0) await new Promise((resolve) => setTimeout(resolve, 400));
+      try {
+        const description = await describePhoto(base64Data, mimeTypeForFile(filePath));
+        raw.slides.push({ offsetSec: lastOffset, content: description.trim(), source: 'file' });
+      } catch (err) {
+        logError('Failed to describe attached photo for notes', err);
+      }
     }
-    return added;
+    library.saveLectureRaw(settings.libraryPath, subject, folderName, raw);
+
+    let markdown: string | null = null;
+    try {
+      markdown = await buildLectureNotes(raw.transcript, raw.slides, []);
+      library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown, false);
+    } catch (err) {
+      logError('Failed to rebuild notes after attaching photos', err);
+    }
+
+    return { fileNames, markdown };
   });
   ipcMain.handle(channels.IPC_DELETE_LECTURE_PHOTO, (_e, subject: string, folderName: string, fileName: string) =>
     library.deleteLecturePhoto(settings.libraryPath, subject, folderName, fileName)

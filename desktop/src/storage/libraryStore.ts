@@ -374,6 +374,11 @@ export function loadLectureRaw(libraryPath: string, subject: string, folderName:
   }
 }
 
+/** Overwrites the raw transcript/slides material - used after attaching a photo to an already-saved lecture. */
+export function saveLectureRaw(libraryPath: string, subject: string, folderName: string, raw: LectureRawMaterial): void {
+  fs.writeFileSync(rawPath(path.join(libraryPath, subject, folderName)), JSON.stringify(raw), 'utf-8');
+}
+
 /**
  * Adds a new recording's content onto the end of an existing lecture instead
  * of creating a new one. If that lecture folder is somehow gone (deleted

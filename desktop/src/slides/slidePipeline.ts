@@ -13,6 +13,16 @@ const VISION_PROMPT =
   'Describe the content of this lecture slide in a few concise bullet points. ' +
   'Focus on titles, key terms, formulas, and any text visible. Ignore decorative elements.';
 
+const PHOTO_PROMPT =
+  'This is a photo of a lecture slide, whiteboard, or handwritten notes, shot separately (e.g. on a ' +
+  'phone) rather than captured live during the recording. Describe its content in a few concise bullet ' +
+  'points: titles, key terms, formulas, and any visible text. Ignore photo artifacts (glare, angle, background).';
+
+/** Describes a single photo attached to an already-saved lecture (not part of the live pipeline above). */
+export function describePhoto(base64Data: string, mimeType: string): Promise<string> {
+  return generateWithDocument(PHOTO_PROMPT, base64Data, mimeType);
+}
+
 const FILE_PROMPT =
   'This is a lecture slide deck. Go through it slide by slide (or page by page) and summarize ' +
   'each one as a short heading plus a few bullet points covering titles, key terms, formulas, and ' +

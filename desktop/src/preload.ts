@@ -130,7 +130,7 @@ contextBridge.exposeInMainWorld('lectureApp', {
 
   listLecturePhotos: (subject: string, folderName: string): Promise<string[]> =>
     ipcRenderer.invoke(channels.IPC_LIST_LECTURE_PHOTOS, subject, folderName),
-  addLecturePhotos: (subject: string, folderName: string): Promise<string[]> =>
+  addLecturePhotos: (subject: string, folderName: string): Promise<{ fileNames: string[]; markdown: string | null }> =>
     ipcRenderer.invoke(channels.IPC_ADD_LECTURE_PHOTOS, subject, folderName),
   deleteLecturePhoto: (subject: string, folderName: string, fileName: string): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_DELETE_LECTURE_PHOTO, subject, folderName, fileName),

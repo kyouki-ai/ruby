@@ -1276,9 +1276,23 @@ async function openNote(subject, lecture, backTo) {
   }
   renderPhotos();
 
-  wrapper.querySelector('#note-photos-add-btn').addEventListener('click', async () => {
-    const added = await window.lectureApp.addLecturePhotos(subject, lecture.folderName);
-    if (added.length > 0) renderPhotos();
+  const photosAddBtn = wrapper.querySelector('#note-photos-add-btn');
+  photosAddBtn.addEventListener('click', async () => {
+    const original = photosAddBtn.innerHTML;
+    photosAddBtn.disabled = true;
+    photosAddBtn.innerHTML = `${rubyGemSvg(13)}`;
+    try {
+      const { fileNames, markdown: updatedMarkdown } = await window.lectureApp.addLecturePhotos(subject, lecture.folderName);
+      if (fileNames.length > 0) renderPhotos();
+      if (updatedMarkdown) {
+        markdown = updatedMarkdown;
+        editorEl.value = markdown;
+        if (!showingOriginal && !showingQuiz) showNotes();
+      }
+    } finally {
+      photosAddBtn.disabled = false;
+      photosAddBtn.innerHTML = original;
+    }
   });
 
   const exportBtn = wrapper.querySelector('#note-export-btn');
