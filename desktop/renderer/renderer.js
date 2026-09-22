@@ -839,15 +839,6 @@ async function openNote(subject, lecture, backTo) {
           <button class="ghost-btn" id="note-cancel-btn">${escapeHtml(t('note.cancel'))}</button>
           <button class="primary-btn" id="note-save-btn">${escapeHtml(t('note.saveBtn'))}</button>
         </div>
-        <div class="note-outline" id="note-outline" style="display:none">
-          <div class="note-outline-head">${escapeHtml(t('note.outlineHead'))}</div>
-          <div class="note-outline-list" id="note-outline-list"></div>
-        </div>
-        ${savedAssignments.length > 0 ? `
-        <div class="note-outline note-assignments-block">
-          <div class="note-outline-head">${escapeHtml(t('assignments.detectedHead'))}</div>
-          <div id="note-assignments-list"></div>
-        </div>` : ''}
       </div>
       <div class="note-actions" id="note-actions">
         ${hasRaw ? `
@@ -861,6 +852,15 @@ async function openNote(subject, lecture, backTo) {
         <button class="ghost-btn" id="note-record-btn">${icon('mic', 14)}<span>${escapeHtml(t('note.recordMore'))}</span></button>
         <button class="ghost-btn" id="note-edit-btn">${icon('pencil', 14)}<span>${escapeHtml(t('note.edit'))}</span></button>
         <button class="ghost-btn" id="note-copy-btn">${icon('copy', 14)}<span>${escapeHtml(t('note.copy'))}</span></button>
+        <div class="note-outline" id="note-outline" style="display:none">
+          <div class="note-outline-head">${escapeHtml(t('note.outlineHead'))}</div>
+          <div class="note-outline-list" id="note-outline-list"></div>
+        </div>
+        ${savedAssignments.length > 0 ? `
+        <div class="note-outline note-assignments-block">
+          <div class="note-outline-head">${escapeHtml(t('assignments.detectedHead'))}</div>
+          <div id="note-assignments-list"></div>
+        </div>` : ''}
       </div>
     </div>
   `;
