@@ -1847,11 +1847,10 @@ function showOnboardingStep(name) {
 
 function proceedFromWelcome() {
   clearTimeout(welcomeAutoAdvanceTimer);
-  if (apiKeyAlreadyConfigured) {
-    dismissOnboarding();
-  } else {
-    showOnboardingStep('api-key');
-  }
+  // The 'welcome' step (this function's only caller) is now only ever
+  // shown on a genuine first run - see initOnboarding - so there's nothing
+  // left to branch on here.
+  showOnboardingStep('api-key');
 }
 
 document.getElementById('welcome-next-btn').addEventListener('click', proceedFromWelcome);
@@ -1880,6 +1879,15 @@ function dismissOnboarding() {
 async function initOnboarding() {
   apiKeyAlreadyConfigured = await checkApiStatus();
   checkGroqApiStatus();
+  if (apiKeyAlreadyConfigured) {
+    // Nothing to set up and nothing to press - just a brief branded
+    // flourish while the app itself finishes loading underneath, instead
+    // of making a returning user look at (and sometimes reflexively
+    // click) a "Начать" button that doesn't actually do anything for them.
+    showOnboardingStep('splash');
+    setTimeout(() => dismissOnboarding(), 950);
+    return;
+  }
   showOnboardingStep('welcome');
   welcomeAutoAdvanceTimer = setTimeout(proceedFromWelcome, 1700);
 }

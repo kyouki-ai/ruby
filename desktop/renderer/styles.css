@@ -886,6 +886,23 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   animation: onboarding-mark-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) both !important;
 }
 
+/* Returning-user launch: no title, no button to press, nothing to actually
+   do - just the gem settling in for a moment before the app itself fades
+   in underneath, instead of the full first-run welcome card. */
+.onboarding-step[data-step="splash"] { padding: 0; }
+.onboarding-splash-mark {
+  width: 96px;
+  height: 96px;
+  margin-bottom: 0;
+  filter: drop-shadow(0 0 28px var(--accent-soft));
+  animation: splash-gem-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
+@keyframes splash-gem-in {
+  0% { opacity: 0; transform: scale(0.4) rotate(-14deg); }
+  65% { opacity: 1; transform: scale(1.08) rotate(3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
 .onboarding-title { font-size: 26px; font-weight: 600; margin: 0 0 10px; font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; }
 .onboarding-subtitle { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin: 0 0 30px; }
 
