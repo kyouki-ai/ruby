@@ -849,6 +849,12 @@ window.lectureApp.onLectureSaved((meta) => {
     switchToTab('history');
     openNote(meta.subject, meta, 'subject');
   };
+  // A remote/extension-started recording never goes through
+  // openRecordingView (there's no pre-picked lecture to set a backAction
+  // for), so liveBackAction was still null once the recording actually
+  // finished - the back button fell through to the subjects grid instead of
+  // the lecture that was just made. Now that it exists, send it there.
+  liveBackAction = () => openNote(meta.subject, meta, 'subject');
 });
 
 document.getElementById('copy-btn').addEventListener('click', () => {
@@ -1524,7 +1530,14 @@ async function openNote(subject, lecture, backTo) {
 
   quizBtn.addEventListener('click', showQuiz);
 
-  async function rebuildNotes() {
+  // `isManual` distinguishes a user-clicked rebuild from the silent
+  // auto-retry below: a failure the user asked for deserves visible
+  // feedback, but a background retry failing shouldn't blow away whatever
+  // was already on screen (the raw-transcript fallback is still genuinely
+  // useful) - it previously did exactly that, replacing real content with
+  // nothing but an error message and no way back to it short of reopening
+  // the note.
+  async function rebuildNotes(isManual = false) {
     if (!rebuildBtn) return;
     const original = rebuildBtn.innerHTML;
     rebuildBtn.disabled = true;
@@ -1536,14 +1549,14 @@ async function openNote(subject, lecture, backTo) {
       quizText = null; // stale now that the underlying notes changed
       if (!showingOriginal && !showingQuiz) showNotes();
     } catch (err) {
-      if (!showingOriginal && !showingQuiz) {
+      if (isManual) {
         const raw = String(err.message || err);
         const message = /503|UNAVAILABLE|overloaded|высок(?:ий|ая) спрос/i.test(raw)
           ? t('note.rebuildFailedOverload')
           : /429|rate.?limit/i.test(raw)
             ? t('note.rebuildFailedRateLimit')
             : t('note.rebuildFailedGeneric', { error: raw });
-        renderEl.innerHTML = `<p class="hint" style="color:var(--danger)">${escapeHtml(message)}</p>`;
+        showAlert(t('note.rebuild'), message);
       }
     } finally {
       rebuildBtn.disabled = false;
@@ -1551,7 +1564,7 @@ async function openNote(subject, lecture, backTo) {
     }
   }
 
-  if (rebuildBtn) rebuildBtn.addEventListener('click', rebuildNotes);
+  if (rebuildBtn) rebuildBtn.addEventListener('click', () => rebuildNotes(true));
   if (originalBtn) {
     originalBtn.addEventListener('click', () => (showingOriginal ? showNotes() : showOriginal()));
   }

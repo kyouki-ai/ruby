@@ -21,17 +21,24 @@ function renderStatus(status) {
     stopView.style.display = 'none';
   }
 
-  wsDot.className = `dot ${status.wsConnected ? 'on' : status.capturing ? 'warn' : ''}`;
   if (!status.capturing && status.error) {
     wsDot.className = 'dot warn';
     wsText.textContent = 'Не удалось начать запись (доступ к микрофону?)';
     return;
   }
+  // While actually recording, wsConnected (the audio-streaming socket) is
+  // what matters; otherwise it's always false regardless of the app being
+  // reachable at all, so controlConnected (the always-on channel) is the
+  // real signal for "is Ruby actually there right now".
+  const connected = status.capturing ? status.wsConnected : status.controlConnected;
+  wsDot.className = `dot ${connected ? 'on' : 'warn'}`;
   wsText.textContent = status.capturing
-    ? status.wsConnected
+    ? connected
       ? 'Подключено к приложению'
       : 'Запись идёт, переподключение...'
-    : 'Приложение не подключено';
+    : connected
+      ? 'Приложение подключено'
+      : 'Подключение к приложению...';
 }
 
 document.querySelectorAll('.mode-btn').forEach((btn) => {

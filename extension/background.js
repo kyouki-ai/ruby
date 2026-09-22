@@ -10,6 +10,13 @@ const SLIDE_INTERVAL_SEC = 25;
 const state = {
   capturing: false,
   wsConnected: false,
+  // Whether the always-on control channel to the desktop app is up right
+  // now - separate from wsConnected, which only ever reflects the
+  // recording-session audio socket and stays false whenever nothing is
+  // being captured. The popup used to show "Приложение не подключено"
+  // any time a recording wasn't active, even with a perfectly healthy
+  // control channel, which read as "broken" when it wasn't.
+  controlConnected: false,
   activeTabId: null,
   mode: null,
 };
@@ -44,6 +51,8 @@ function connectControlChannel() {
   controlWs = new WebSocket(WS_URL);
   controlWs.addEventListener('open', () => {
     controlWs.send(JSON.stringify({ type: 'extension-ready' }));
+    state.controlConnected = true;
+    broadcastStatus();
   });
   controlWs.addEventListener('message', (event) => {
     let msg;
@@ -72,20 +81,37 @@ function connectControlChannel() {
   });
   // Short retry - a dropped control connection should look "instant" to
   // someone watching the desktop app's recording screen, not "broken".
-  controlWs.addEventListener('close', () => setTimeout(connectControlChannel, 1000));
+  controlWs.addEventListener('close', () => {
+    state.controlConnected = false;
+    broadcastStatus();
+    setTimeout(connectControlChannel, 1000);
+  });
   controlWs.addEventListener('error', () => controlWs.close());
 }
 
 connectControlChannel();
 // The desktop app is the source of truth for "is the extension reachable
 // right now" - a service worker can be evicted after ~30s idle, so these
-// wake it back up and re-open the control channel on a regular cadence.
+// wake it back up and re-open the control channel.
 chrome.runtime.onStartup.addListener(connectControlChannel);
 chrome.runtime.onInstalled.addListener(connectControlChannel);
+// chrome.alarms is the only thing that can revive an already-terminated
+// worker with no other trigger in sight, but Chrome enforces a hard 1-minute
+// floor on repeating alarms - worst case, a dead worker could sit dead for
+// up to a full minute before this fires, which is exactly the "record"
+// button doing nothing until suddenly it doesn't" delay this used to cause.
 chrome.alarms.create('control-channel-keepalive', { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'control-channel-keepalive') connectControlChannel();
 });
+// Ordinary browsing already fires these constantly (far more often than
+// once a minute) - piggybacking on them re-arms the connection the moment
+// the worker is woken for anything at all, instead of waiting on the alarm.
+// The realistic "start recording" flow is: user is on the lecture tab, they
+// switch to Ruby to hit start - that window-focus change alone wakes this.
+chrome.tabs.onActivated.addListener(connectControlChannel);
+chrome.tabs.onUpdated.addListener(connectControlChannel);
+chrome.windows.onFocusChanged.addListener(connectControlChannel);
 
 function broadcastStatus() {
   chrome.runtime.sendMessage({ type: 'status-update', status: { ...state } }).catch(() => {
