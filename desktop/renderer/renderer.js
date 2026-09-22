@@ -489,6 +489,7 @@ function finalizeCountdownHtml(secondsLeft) {
 
 function startFinalizingCountdown() {
   stopFinalizingCountdown();
+  document.getElementById('live-notes-panel').style.display = '';
   let secondsLeft = FINALIZE_ESTIMATE_SEC;
   notesBox.innerHTML = finalizeCountdownHtml(secondsLeft);
   finalizingCountdownTimer = setInterval(() => {
@@ -537,8 +538,12 @@ window.lectureApp.onConnectionStatus((connected, tabTitle) => {
   document.getElementById('silence-warning').style.display = 'none';
   // The structured conspect is only built once, when recording stops (see
   // main.ts) - rebuilding it continuously would burn through Gemini's free
-  // daily quota well before a full day of lectures is over.
-  notesBox.innerHTML = `<p class="hint">${escapeHtml(t('live.notesPlaceholder'))}</p>`;
+  // daily quota well before a full day of lectures is over. Showing an
+  // empty "will appear after you stop" panel for the entire recording was
+  // just dead space - hide it and let the transcript use the full width
+  // until there's actually something to show (see startFinalizingCountdown).
+  document.getElementById('live-notes-panel').style.display = 'none';
+  notesBox.innerHTML = '';
 });
 
 // --- Live assignment/homework detection (see assignments/assignmentDetector.ts) ---
