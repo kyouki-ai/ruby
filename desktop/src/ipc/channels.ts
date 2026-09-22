@@ -93,6 +93,12 @@ export const IPC_LIST_SCHEDULE = 'list-schedule';
 export const IPC_SAVE_SCHEDULE_ENTRY = 'save-schedule-entry';
 export const IPC_DELETE_SCHEDULE_ENTRY = 'delete-schedule-entry';
 
+// Photos attached to an already-saved lecture (see storage/libraryStore.ts).
+export const IPC_LIST_LECTURE_PHOTOS = 'list-lecture-photos';
+export const IPC_ADD_LECTURE_PHOTOS = 'add-lecture-photos';
+export const IPC_DELETE_LECTURE_PHOTO = 'delete-lecture-photo';
+export const IPC_GET_LECTURE_PHOTO = 'get-lecture-photo';
+
 // Live detection of a spoken task/homework announcement (see
 // assignments/assignmentDetector.ts) - pushed as it happens during
 // recording, plus a way to copy one (text + slide image) to the clipboard.

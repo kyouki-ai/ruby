@@ -128,6 +128,15 @@ contextBridge.exposeInMainWorld('lectureApp', {
   setLecturePosition: (subject: string, folderName: string, groupId: string | null, order: number): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_SET_LECTURE_POSITION, subject, folderName, groupId, order),
 
+  listLecturePhotos: (subject: string, folderName: string): Promise<string[]> =>
+    ipcRenderer.invoke(channels.IPC_LIST_LECTURE_PHOTOS, subject, folderName),
+  addLecturePhotos: (subject: string, folderName: string): Promise<string[]> =>
+    ipcRenderer.invoke(channels.IPC_ADD_LECTURE_PHOTOS, subject, folderName),
+  deleteLecturePhoto: (subject: string, folderName: string, fileName: string): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_DELETE_LECTURE_PHOTO, subject, folderName, fileName),
+  getLecturePhoto: (subject: string, folderName: string, fileName: string): Promise<string> =>
+    ipcRenderer.invoke(channels.IPC_GET_LECTURE_PHOTO, subject, folderName, fileName),
+
   listSchedule: (): Promise<ScheduleEntry[]> => ipcRenderer.invoke(channels.IPC_LIST_SCHEDULE),
   saveScheduleEntry: (entry: Omit<ScheduleEntry, 'id'> & { id?: string }): Promise<ScheduleEntry> =>
     ipcRenderer.invoke(channels.IPC_SAVE_SCHEDULE_ENTRY, entry),

@@ -771,6 +771,54 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 .assignment-slide-hint { color: var(--text-muted); font-size: 11.5px; margin-top: 2px; }
 .assignment-copy-btn { flex-shrink: 0; }
 .note-assignments-block { margin-top: 20px; }
+
+.note-photos-block { margin-top: 20px; }
+.note-photos-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.note-photos-head .note-outline-head { margin-bottom: 0; }
+.note-photos-add-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.note-photos-add-btn:hover { background: var(--bg-active); color: var(--text); }
+.note-photos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.note-photo-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--bg);
+}
+.note-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.note-photo-thumb-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+.note-photo-thumb:hover .note-photo-thumb-delete { opacity: 1; }
+.note-photos-empty { font-size: 12px; color: var(--text-dim); grid-column: 1 / -1; }
 .note-editor {
   width: 100%;
   min-height: 320px;
@@ -880,6 +928,21 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   animation: modal-overlay-fade-in 0.2s ease;
 }
 .modal-overlay .modal-box { animation: modal-box-pop-in 0.22s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.photo-lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: modal-box-pop-in 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.photo-lightbox-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+}
+.photo-lightbox-close-btn:hover { background: rgba(0, 0, 0, 0.6); }
 .modal-box {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

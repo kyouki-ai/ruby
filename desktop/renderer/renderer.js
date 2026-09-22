@@ -67,6 +67,24 @@ function showAlert(title, message) {
   return new Promise((resolve) => { modalOverlay._resolve = () => resolve(); });
 }
 
+// --- Photo lightbox: a plain full-size preview for a lecture's attached
+// photos (see openNote's "note.photos" section). ---
+const photoLightboxOverlay = document.getElementById('photo-lightbox-overlay');
+const photoLightboxImg = document.getElementById('photo-lightbox-img');
+document.getElementById('photo-lightbox-close-btn').innerHTML = icon('winClose', 18);
+function openPhotoLightbox(dataUrl) {
+  photoLightboxImg.src = dataUrl;
+  photoLightboxOverlay.style.display = 'flex';
+}
+function closePhotoLightbox() {
+  photoLightboxOverlay.style.display = 'none';
+  photoLightboxImg.src = '';
+}
+document.getElementById('photo-lightbox-close-btn').addEventListener('click', closePhotoLightbox);
+photoLightboxOverlay.addEventListener('click', (e) => {
+  if (e.target === photoLightboxOverlay) closePhotoLightbox();
+});
+
 /** Renders a LaTeX expression via KaTeX (loaded globally from vendor/katex),
  * falling back to plain escaped text if katex isn't available or the
  * expression is malformed - a broken formula should never break the whole
@@ -1204,6 +1222,13 @@ async function openNote(subject, lecture, backTo) {
           <div class="note-outline-head">${escapeHtml(t('assignments.detectedHead'))}</div>
           <div id="note-assignments-list"></div>
         </div>` : ''}
+        <div class="note-outline note-photos-block">
+          <div class="note-photos-head">
+            <span class="note-outline-head">${escapeHtml(t('note.photos'))}</span>
+            <button class="note-photos-add-btn" id="note-photos-add-btn" title="${escapeHtml(t('note.photosAdd'))}">${icon('plus', 13)}</button>
+          </div>
+          <div class="note-photos-grid" id="note-photos-grid"></div>
+        </div>
       </div>
     </div>
   `;
@@ -1216,6 +1241,45 @@ async function openNote(subject, lecture, backTo) {
     const listEl = wrapper.querySelector('#note-assignments-list');
     for (const entry of savedAssignments) listEl.appendChild(assignmentRow(entry));
   }
+
+  const photosGrid = wrapper.querySelector('#note-photos-grid');
+  async function renderPhotos() {
+    const fileNames = await window.lectureApp.listLecturePhotos(subject, lecture.folderName);
+    photosGrid.innerHTML = '';
+    if (fileNames.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'note-photos-empty';
+      empty.textContent = t('note.photosEmpty');
+      photosGrid.appendChild(empty);
+      return;
+    }
+    for (const fileName of fileNames) {
+      const thumb = document.createElement('div');
+      thumb.className = 'note-photo-thumb';
+      thumb.innerHTML = `<button class="note-photo-thumb-delete">${icon('winClose', 11)}</button>`;
+      const img = document.createElement('img');
+      window.lectureApp.getLecturePhoto(subject, lecture.folderName, fileName).then((dataUrl) => {
+        img.src = dataUrl;
+      });
+      thumb.prepend(img);
+      thumb.addEventListener('click', async () => {
+        const dataUrl = await window.lectureApp.getLecturePhoto(subject, lecture.folderName, fileName);
+        openPhotoLightbox(dataUrl);
+      });
+      thumb.querySelector('.note-photo-thumb-delete').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await window.lectureApp.deleteLecturePhoto(subject, lecture.folderName, fileName);
+        renderPhotos();
+      });
+      photosGrid.appendChild(thumb);
+    }
+  }
+  renderPhotos();
+
+  wrapper.querySelector('#note-photos-add-btn').addEventListener('click', async () => {
+    const added = await window.lectureApp.addLecturePhotos(subject, lecture.folderName);
+    if (added.length > 0) renderPhotos();
+  });
 
   const exportBtn = wrapper.querySelector('#note-export-btn');
   exportBtn.addEventListener('click', (e) => {

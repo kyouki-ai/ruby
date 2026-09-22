@@ -452,3 +452,34 @@ export function renameLecture(libraryPath: string, subject: string, folderName: 
 export function deleteLecture(libraryPath: string, subject: string, folderName: string): void {
   fs.rmSync(path.join(libraryPath, subject, folderName), { recursive: true, force: true });
 }
+
+// Photos attached after the fact - e.g. slides shot on a phone during a
+// mic-only recording that never went through the live slide pipeline.
+// Filenames are timestamp-prefixed so a plain sort is also chronological.
+function photosDir(libraryPath: string, subject: string, folderName: string): string {
+  return path.join(libraryPath, subject, folderName, 'photos');
+}
+
+export function listLecturePhotos(libraryPath: string, subject: string, folderName: string): string[] {
+  try {
+    return fs.readdirSync(photosDir(libraryPath, subject, folderName)).sort();
+  } catch {
+    return [];
+  }
+}
+
+export function addLecturePhoto(libraryPath: string, subject: string, folderName: string, base64Data: string, ext: string): string {
+  const dir = photosDir(libraryPath, subject, folderName);
+  fs.mkdirSync(dir, { recursive: true });
+  const fileName = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
+  fs.writeFileSync(path.join(dir, fileName), Buffer.from(base64Data, 'base64'));
+  return fileName;
+}
+
+export function deleteLecturePhoto(libraryPath: string, subject: string, folderName: string, fileName: string): void {
+  fs.rmSync(path.join(photosDir(libraryPath, subject, folderName), fileName), { force: true });
+}
+
+export function loadLecturePhoto(libraryPath: string, subject: string, folderName: string, fileName: string): Buffer {
+  return fs.readFileSync(path.join(photosDir(libraryPath, subject, folderName), fileName));
+}

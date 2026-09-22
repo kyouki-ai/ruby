@@ -97,6 +97,7 @@ function mimeTypeForFile(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.pdf') return 'application/pdf';
   if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
   return 'image/jpeg';
 }
 
@@ -692,6 +693,31 @@ function setupIpcHandlers(): void {
     (_e, subject: string, folderName: string, groupId: string | null, order: number) =>
       library.setLecturePosition(settings.libraryPath, subject, folderName, groupId, order)
   );
+
+  ipcMain.handle(channels.IPC_LIST_LECTURE_PHOTOS, (_e, subject: string, folderName: string) =>
+    library.listLecturePhotos(settings.libraryPath, subject, folderName)
+  );
+  ipcMain.handle(channels.IPC_ADD_LECTURE_PHOTOS, async (_e, subject: string, folderName: string) => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Фото', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+    });
+    if (result.canceled) return [];
+    const added: string[] = [];
+    for (const filePath of result.filePaths) {
+      const ext = path.extname(filePath).slice(1).toLowerCase() || 'jpg';
+      const base64Data = fs.readFileSync(filePath).toString('base64');
+      added.push(library.addLecturePhoto(settings.libraryPath, subject, folderName, base64Data, ext));
+    }
+    return added;
+  });
+  ipcMain.handle(channels.IPC_DELETE_LECTURE_PHOTO, (_e, subject: string, folderName: string, fileName: string) =>
+    library.deleteLecturePhoto(settings.libraryPath, subject, folderName, fileName)
+  );
+  ipcMain.handle(channels.IPC_GET_LECTURE_PHOTO, (_e, subject: string, folderName: string, fileName: string) => {
+    const buffer = library.loadLecturePhoto(settings.libraryPath, subject, folderName, fileName);
+    return `data:${mimeTypeForFile(fileName)};base64,${buffer.toString('base64')}`;
+  });
 
   ipcMain.handle(channels.IPC_LIST_SCHEDULE, () => schedule.listSchedule(settings.libraryPath));
   ipcMain.handle(channels.IPC_SAVE_SCHEDULE_ENTRY, (_e, entry: Omit<schedule.ScheduleEntry, 'id'> & { id?: string }) =>
