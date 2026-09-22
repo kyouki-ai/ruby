@@ -58,6 +58,43 @@ body {
 }
 
 .app { display: flex; flex-direction: column; height: 100vh; }
+.app-body { flex: 1; display: flex; min-height: 0; }
+
+/* ---------- Chat sidebar (persistent, like Claude/ChatGPT's own chat list) ---------- */
+
+.chat-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 10px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.chat-sidebar-head { display: flex; align-items: center; padding: 0 4px; }
+.chat-sidebar-head span {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.chat-sidebar-new-btn { width: 100%; justify-content: flex-start; }
+.chat-sidebar-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.chat-sidebar-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 13px; color: var(--text-dim);
+}
+.chat-sidebar-row:hover { background: var(--bg-hover); color: var(--text); }
+.chat-sidebar-row.active { background: var(--bg-active); color: var(--text); }
+.chat-sidebar-row-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-sidebar-row-menu {
+  flex-shrink: 0; opacity: 0; background: none; border: none; color: inherit;
+  cursor: pointer; padding: 3px; border-radius: 4px; display: flex; align-items: center;
+}
+.chat-sidebar-row:hover .chat-sidebar-row-menu { opacity: 1; }
+.chat-sidebar-row-menu:hover { background: var(--bg-active); }
+.chat-sidebar-empty { padding: 8px 6px; font-size: 12.5px; }
 
 /* ---------- Top bar ---------- */
 
@@ -496,9 +533,65 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 
 .empty-state { color: var(--text-dim); font-size: 13.5px; padding: 40px 0; text-align: center; }
 
-.note-view { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; max-width: 760px; }
+.note-view { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; max-width: 1180px; }
 .note-view-head { display: flex; align-items: center; gap: 10px; row-gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .note-meta { font-size: 12.5px; color: var(--text-dim); }
+
+/* The action buttons used to crowd the header next to the date, and the
+   note itself was capped to 760px wide regardless of window size - leaving
+   a large unused gap on the right. Now that gap holds the actions as a
+   vertical panel instead, and the note's own leftover vertical space below
+   the text holds a clickable outline of its "## " section headings. */
+.note-view-body { display: flex; gap: 24px; align-items: flex-start; }
+.note-main { flex: 1; min-width: 0; }
+.note-actions { width: 208px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.note-actions .ghost-btn { width: 100%; justify-content: flex-start; }
+.note-actions .detail-toggle { width: 100%; }
+.note-actions .detail-toggle-btn { flex: 1; }
+
+.note-outline { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 12px; }
+.note-outline-head {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+}
+.note-outline-row {
+  padding: 5px 8px; border-radius: var(--radius-sm); font-size: 12.5px;
+  color: var(--text-dim); cursor: pointer;
+}
+.note-outline-row:hover { background: var(--bg-hover); color: var(--text); }
+
+@keyframes note-heading-flash {
+  0% { background: transparent; }
+  20% { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+  100% { background: transparent; }
+}
+.note-heading-flash { animation: note-heading-flash 1.1s ease-out; border-radius: 4px; }
+
+/* ---------- Assignment/homework detection (live panel + saved note view) ---------- */
+
+.live-assignments {
+  flex-shrink: 0;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.assignment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.assignment-row:first-child { border-top: none; }
+.assignment-text { flex: 1; color: var(--text-dim); line-height: 1.5; }
+.assignment-slide-hint { color: var(--text-muted); font-size: 11.5px; margin-top: 2px; }
+.assignment-copy-btn { flex-shrink: 0; }
+.note-assignments-block { margin-top: 20px; }
 .note-editor {
   width: 100%;
   min-height: 320px;

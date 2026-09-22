@@ -1,6 +1,8 @@
 // Plain-JS renderer logic. Runs in the isolated renderer context; the only
 // bridge to the main process is `window.lectureApp`, exposed by preload.ts.
-// `icon()` / `ICONS` come from icons.js, loaded before this file.
+// `icon()` / `ICONS` come from icons.js, `t()`/`getLang()`/`setLang()` from
+// i18n.js, both loaded before this file.
+applyStaticTranslations();
 
 // --- Modal dialogs (Electron does not implement window.prompt - it silently
 // returns null - so text input and confirmation both go through this). ---
@@ -31,7 +33,7 @@ function askText(title, defaultValue = '') {
   modalMessage.style.display = 'none';
   modalInput.style.display = 'block';
   modalInput.value = defaultValue;
-  modalOkBtn.textContent = 'ОК';
+  modalOkBtn.textContent = t('common.ok');
   modalOkBtn.onclick = () => closeModal(modalInput.value.trim() || null);
   modalOverlay.style.display = 'flex';
   setTimeout(() => modalInput.select(), 0);
@@ -44,17 +46,21 @@ function askConfirm(title, message) {
   modalMessage.textContent = message;
   modalMessage.style.display = 'block';
   modalInput.style.display = 'none';
-  modalOkBtn.textContent = 'Удалить';
+  modalOkBtn.textContent = t('common.delete');
   modalOkBtn.onclick = () => closeModal(true);
   modalOverlay.style.display = 'flex';
   return new Promise((resolve) => { modalOverlay._resolve = (v) => resolve(Boolean(v)); });
 }
 
-/** Tiny markdown -> HTML renderer covering just what notesBuilder.ts produces. */
+/** Tiny markdown -> HTML renderer covering just what notesBuilder.ts produces.
+ * Headings get a stable `note-heading-N` id (N = its position among headings,
+ * in document order) so the note view's outline panel can scroll straight to
+ * one by index - harmless for the other places this renders (chat replies). */
 function renderMarkdown(markdown) {
   const lines = markdown.split('\n');
   let html = '';
   let inList = false;
+  let headingIndex = 0;
 
   const closeList = () => {
     if (inList) { html += '</ul>'; inList = false; }
@@ -67,7 +73,7 @@ function renderMarkdown(markdown) {
     if (heading) {
       closeList();
       const level = heading[1].length + 1; // ## -> h3
-      html += `<h${level}>${inlineMarkdown(heading[2])}</h${level}>`;
+      html += `<h${level} id="note-heading-${headingIndex++}">${inlineMarkdown(heading[2])}</h${level}>`;
     } else if (bullet) {
       if (!inList) { html += '<ul>'; inList = true; }
       html += `<li>${inlineMarkdown(bullet[1])}</li>`;
@@ -82,6 +88,21 @@ function renderMarkdown(markdown) {
   return html;
 }
 
+/** Same heading scan/indexing as renderMarkdown, kept separate so the note
+ * view's outline panel can list them without re-parsing the rendered HTML. */
+function extractHeadings(markdown) {
+  const headings = [];
+  let idx = 0;
+  for (const line of markdown.split('\n')) {
+    const m = /^(#{1,3})\s+(.*)/.exec(line);
+    if (m) {
+      headings.push({ id: `note-heading-${idx}`, level: m[1].length, text: m[2].trim().replace(/^⭐\s*/, '') });
+      idx++;
+    }
+  }
+  return headings;
+}
+
 function inlineMarkdown(text) {
   return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }
@@ -90,6 +111,36 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+/** The text handed to another AI when copying a detected assignment - the
+ * slide image itself rides along separately via clipboard.write({text,image}). */
+function buildAssignmentPrompt(entry) {
+  let prompt = t('assignments.promptIntro', { text: entry.text.trim() });
+  if (entry.slideText) prompt += `\n\n${t('assignments.promptSlideText')}\n${entry.slideText}`;
+  if (entry.slideScreenshotBase64) prompt += `\n\n${t('assignments.promptHasImage')}`;
+  prompt += `\n\n${t('assignments.promptAsk')}`;
+  return prompt;
+}
+
+function assignmentRow(entry) {
+  const row = document.createElement('div');
+  row.className = 'assignment-row';
+  row.innerHTML = `
+    <div class="assignment-text">
+      [${formatTimestamp(entry.offsetSec)}] ${escapeHtml(entry.text.trim())}
+      ${entry.slideScreenshotBase64 ? `<div class="assignment-slide-hint">${escapeHtml(t('assignments.slideHint'))}</div>` : ''}
+    </div>
+    <button class="ghost-btn assignment-copy-btn">${icon('copy', 13)}<span>${escapeHtml(t('assignments.copy'))}</span></button>
+  `;
+  const btn = row.querySelector('.assignment-copy-btn');
+  btn.addEventListener('click', async () => {
+    await window.lectureApp.copyAssignmentPrompt(buildAssignmentPrompt(entry), entry.slideScreenshotBase64 || null);
+    const original = btn.innerHTML;
+    btn.innerHTML = `${icon('copy', 13)}<span>${escapeHtml(t('assignments.copied'))}</span>`;
+    setTimeout(() => { btn.innerHTML = original; }, 1500);
+  });
+  return row;
 }
 
 function formatTimestamp(sec) {
@@ -178,14 +229,14 @@ document.getElementById('win-maximize-btn').addEventListener('click', () => wind
 document.getElementById('win-close-btn').addEventListener('click', () => window.lectureApp.closeWindow());
 
 // --- Static icon buttons ---
-document.getElementById('copy-btn').innerHTML = `${icon('copy', 15)}<span>Копировать</span>`;
+document.getElementById('copy-btn').innerHTML = `${icon('copy', 15)}<span>${escapeHtml(t('note.copy'))}</span>`;
 document.getElementById('lib-back-btn').innerHTML = icon('chevronLeft', 18);
 document.getElementById('search-icon').innerHTML = icon('search', 16);
 
 document.getElementById('copy-chrome-url-btn').addEventListener('click', (e) => {
   window.lectureApp.copyText('chrome://extensions');
   const original = e.currentTarget.textContent;
-  e.currentTarget.textContent = 'Скопировано';
+  e.currentTarget.textContent = t('assignments.copied');
   setTimeout(() => (e.currentTarget.textContent = original), 1500);
 });
 
@@ -218,7 +269,10 @@ function backToMainMode() {
   }
 }
 
-document.getElementById('mode-chat-btn').addEventListener('click', () => openChatThreadGrid());
+document.getElementById('mode-chat-btn').addEventListener('click', () => {
+  if (currentThreadId) switchToTab('chat');
+  else initChat();
+});
 document.getElementById('mode-library-btn').addEventListener('click', () => {
   switchToTab('history');
   openSubjectGrid();
@@ -275,8 +329,8 @@ let finalizingCountdownTimer = null;
 
 function finalizeCountdownHtml(secondsLeft) {
   return secondsLeft > 0
-    ? `<p class="hint">${rubyGemSvg(13)} Собираю конспект… обычно занимает около ${FINALIZE_ESTIMATE_SEC} сек, осталось примерно ${secondsLeft}с.</p>`
-    : `<p class="hint">${rubyGemSvg(13)} Ещё немного — иногда занимает дольше обычного.</p>`;
+    ? `<p class="hint">${rubyGemSvg(13)} ${escapeHtml(t('live.finalizing', { sec: FINALIZE_ESTIMATE_SEC, left: secondsLeft }))}</p>`
+    : `<p class="hint">${rubyGemSvg(13)} ${escapeHtml(t('live.finalizingLong'))}</p>`;
 }
 
 function startFinalizingCountdown() {
@@ -324,10 +378,32 @@ window.lectureApp.onConnectionStatus((connected, tabTitle) => {
   }
   stopFinalizingCountdown();
   transcriptBox.innerHTML = '';
+  liveAssignments = [];
+  renderLiveAssignments();
   // The structured conspect is only built once, when recording stops (see
   // main.ts) - rebuilding it continuously would burn through Gemini's free
   // daily quota well before a full day of lectures is over.
-  notesBox.innerHTML = '<p class="hint">Появится здесь после остановки записи.</p>';
+  notesBox.innerHTML = `<p class="hint">${escapeHtml(t('live.notesPlaceholder'))}</p>`;
+});
+
+// --- Live assignment/homework detection (see assignments/assignmentDetector.ts) ---
+let liveAssignments = [];
+
+function renderLiveAssignments() {
+  const panel = document.getElementById('live-assignments');
+  const listEl = document.getElementById('live-assignments-list');
+  if (liveAssignments.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  listEl.innerHTML = '';
+  for (const entry of liveAssignments) listEl.appendChild(assignmentRow(entry));
+}
+
+window.lectureApp.onAssignmentDetected((entry) => {
+  liveAssignments.push(entry);
+  renderLiveAssignments();
 });
 
 // --- In-app microphone recording (offline lecture, no browser needed) ---
@@ -402,7 +478,7 @@ async function startMicRecording() {
   try {
     micStreamForApp = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
-    micErrorEl.textContent = 'Доступ к микрофону не получен — разреши доступ и попробуй снова.';
+    micErrorEl.textContent = t('live.micError');
     return;
   }
 
@@ -449,7 +525,7 @@ async function stopMicRecording() {
   await window.lectureApp.stopMicSession();
 }
 
-document.getElementById('start-mic-btn').innerHTML = `${icon('mic', 16)}<span>Начать запись с микрофона</span>`;
+document.getElementById('start-mic-btn').innerHTML = `${icon('mic', 16)}<span>${escapeHtml(t('live.startMic'))}</span>`;
 document.getElementById('start-mic-btn').addEventListener('click', startMicRecording);
 
 // --- Remote-starting the browser extension, no popup click needed ---
@@ -487,7 +563,7 @@ async function remoteStart(mode) {
   if (!ok) {
     // The control channel dropped between the card showing "Подключено" and
     // this click - say so instead of leaving the button looking like a dud.
-    errorEl.textContent = 'Расширение отключилось. Подожди пару секунд и попробуй снова.';
+    errorEl.textContent = t('live.extensionDisconnected');
     errorEl.style.display = 'block';
   }
 }
@@ -499,7 +575,7 @@ document.getElementById('stop-mic-btn').addEventListener('click', async () => {
   if (btn.disabled) return;
   btn.disabled = true;
   const original = btn.textContent;
-  btn.textContent = 'Собираю конспект...';
+  btn.textContent = t('note.rebuilding');
   isFinalizing = true;
   startFinalizingCountdown();
 
@@ -534,11 +610,11 @@ document.getElementById('stop-mic-btn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('attach-slide-btn').innerHTML = `${icon('file', 15)}<span>Прикрепить файл слайдов</span>`;
+document.getElementById('attach-slide-btn').innerHTML = `${icon('file', 15)}<span>${escapeHtml(t('live.attachSlideFile'))}</span>`;
 document.getElementById('attach-slide-btn').addEventListener('click', async () => {
   const btn = document.getElementById('attach-slide-btn');
   const original = btn.innerHTML;
-  btn.innerHTML = `${icon('file', 15)}<span>Обрабатываю...</span>`;
+  btn.innerHTML = `${icon('file', 15)}<span>${escapeHtml(t('live.attachingSlideFile'))}</span>`;
   try {
     await window.lectureApp.attachSlideFile();
   } finally {
@@ -623,7 +699,7 @@ async function openSubjectGrid() {
   libraryState.view = 'grid';
   libraryState.subject = null;
   searchInput.value = '';
-  libTitle.textContent = 'Мои предметы';
+  libTitle.textContent = t('library.title');
   libBackBtn.style.display = 'none';
   document.getElementById('lib-chat-btn').style.display = 'none';
 
@@ -651,8 +727,8 @@ async function openSubjectGrid() {
   const grid = document.createElement('div');
   grid.className = 'card-grid';
 
-  grid.appendChild(newCard('Новый предмет', async () => {
-    const name = await askText('Название предмета');
+  grid.appendChild(newCard(t('library.newSubject'), async () => {
+    const name = await askText(t('library.newSubjectPrompt'));
     if (!name) return;
     const created = await window.lectureApp.createSubject(name);
     await window.lectureApp.setCurrentSubject(created);
@@ -664,13 +740,13 @@ async function openSubjectGrid() {
     grid.appendChild(
       subjectCard(subject, lectures.length, () => openSubject(subject), {
         onRename: async () => {
-          const newName = await askText('Новое название предмета', subject);
+          const newName = await askText(t('library.renameSubjectPrompt'), subject);
           if (!newName || newName === subject) return;
           await window.lectureApp.renameSubject(subject, newName);
           openSubjectGrid();
         },
         onDelete: async () => {
-          const ok = await askConfirm('Удалить предмет?', `«${subject}» вместе со всеми лекциями внутри будет удалён без возможности восстановления.`);
+          const ok = await askConfirm(t('library.deleteSubjectTitle'), t('library.deleteSubjectMsg', { name: subject }));
           if (!ok) return;
           await window.lectureApp.deleteSubject(subject);
           openSubjectGrid();
@@ -692,9 +768,9 @@ async function openSubject(subject) {
   libBackBtn.onclick = openSubjectGrid;
   const chatBtn = document.getElementById('lib-chat-btn');
   chatBtn.style.display = 'inline-flex';
-  chatBtn.innerHTML = `${icon('chat', 14)}<span>Чат по предмету</span>`;
+  chatBtn.innerHTML = `${icon('chat', 14)}<span>${escapeHtml(t('library.chatBySubject'))}</span>`;
   chatBtn.onclick = async () => {
-    const thread = await window.lectureApp.findOrCreateLectureThread(subject, null, `Чат: ${subject}`);
+    const thread = await window.lectureApp.findOrCreateLectureThread(subject, null, t('chat.scopeSubjectTitle', { name: subject }));
     openChatThread(thread.id, { backAction: () => openSubject(subject) });
   };
 
@@ -703,8 +779,8 @@ async function openSubject(subject) {
   const grid = document.createElement('div');
   grid.className = 'card-grid';
 
-  grid.appendChild(newCard('Новая лекция', async () => {
-    const title = await askText('Название лекции');
+  grid.appendChild(newCard(t('library.newLecture'), async () => {
+    const title = await askText(t('library.newLecturePrompt'));
     if (!title) return;
     const meta = await window.lectureApp.createLecture(subject, title);
     openRecordingView(subject, meta);
@@ -723,29 +799,30 @@ async function openNote(subject, lecture, backTo) {
   libBackBtn.onclick = () => (backTo === 'search' ? renderSearchResults() : openSubject(subject));
   const chatBtn = document.getElementById('lib-chat-btn');
   chatBtn.style.display = 'inline-flex';
-  chatBtn.innerHTML = `${icon('chat', 14)}<span>Чат по лекции</span>`;
+  chatBtn.innerHTML = `${icon('chat', 14)}<span>${escapeHtml(t('library.chatByLecture'))}</span>`;
   chatBtn.onclick = async () => {
-    const thread = await window.lectureApp.findOrCreateLectureThread(subject, lecture.folderName, `Чат: ${lecture.title}`);
+    const thread = await window.lectureApp.findOrCreateLectureThread(subject, lecture.folderName, t('chat.scopeSubjectTitle', { name: lecture.title }));
     openChatThread(thread.id, { backAction: () => openNote(subject, lecture, backTo) });
   };
 
   let markdown = await window.lectureApp.loadLecture(subject, lecture.folderName);
   const raw = await window.lectureApp.loadLectureRaw(subject, lecture.folderName);
   const hasRaw = Boolean(raw && (raw.transcript.length > 0 || raw.slides.length > 0));
+  const savedAssignments = raw && raw.assignments ? raw.assignments : [];
   let showingOriginal = false;
 
-  const dateStr = new Date(lecture.date).toLocaleString('ru-RU', {
+  const dateStr = new Date(lecture.date).toLocaleString(getLang() === 'en' ? 'en-US' : 'ru-RU', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
-  const durationStr = lecture.durationSec > 0 ? ` · ${Math.round(lecture.durationSec / 60)} мин` : '';
+  const durationStr = lecture.durationSec > 0 ? ` · ${Math.round(lecture.durationSec / 60)} ${getLang() === 'en' ? 'min' : 'мин'}` : '';
 
   function renderOriginalHtml() {
     const lines = raw.transcript.map((s) => `<div class="transcript-line"><span class="ts">[${formatTimestamp(s.startSec)}]</span>${escapeHtml(s.text)}</div>`);
-    return lines.join('') || '<p class="hint">Расшифровка речи пуста.</p>';
+    return lines.join('') || `<p class="hint">${escapeHtml(t('note.transcriptEmpty'))}</p>`;
   }
 
   const wrapper = document.createElement('div');
@@ -753,29 +830,47 @@ async function openNote(subject, lecture, backTo) {
   wrapper.innerHTML = `
     <div class="note-view-head">
       <span class="note-meta">${dateStr}${durationStr}</span>
-      <div class="toolbar-spacer"></div>
-      ${hasRaw ? `
-      <div class="detail-toggle" id="note-detail-toggle" title="Подробность при пересборке">
-        <button type="button" class="detail-toggle-btn active" data-level="concise">Кратко</button>
-        <button type="button" class="detail-toggle-btn" data-level="detailed">Подробно</button>
-      </div>` : ''}
-      ${hasRaw ? `<button class="ghost-btn" id="note-rebuild-btn">${icon('file', 14)}<span>Пересобрать конспект</span></button>` : ''}
-      ${hasRaw ? `<button class="ghost-btn" id="note-original-btn">${icon('mic', 14)}<span>Что записалось</span></button>` : ''}
-      <button class="ghost-btn" id="note-quiz-btn">${icon('help', 14)}<span>Проверь себя</span></button>
-      <button class="ghost-btn" id="note-record-btn">${icon('mic', 14)}<span>Записать ещё</span></button>
-      <button class="ghost-btn" id="note-edit-btn">${icon('pencil', 14)}<span>Изменить</span></button>
-      <button class="ghost-btn" id="note-copy-btn">${icon('copy', 14)}<span>Копировать</span></button>
     </div>
-    <div class="notes scroll-box" id="note-render">${renderMarkdown(markdown) || '<p class="hint">Пока пусто.</p>'}</div>
-    <textarea id="note-editor" class="note-editor" style="display:none"></textarea>
-    <div class="modal-actions" id="note-edit-actions" style="display:none">
-      <button class="ghost-btn" id="note-cancel-btn">Отмена</button>
-      <button class="primary-btn" id="note-save-btn">Сохранить</button>
+    <div class="note-view-body">
+      <div class="note-main">
+        <div class="notes scroll-box" id="note-render">${renderMarkdown(markdown) || `<p class="hint">${escapeHtml(t('note.empty'))}</p>`}</div>
+        <textarea id="note-editor" class="note-editor" style="display:none"></textarea>
+        <div class="modal-actions" id="note-edit-actions" style="display:none">
+          <button class="ghost-btn" id="note-cancel-btn">${escapeHtml(t('note.cancel'))}</button>
+          <button class="primary-btn" id="note-save-btn">${escapeHtml(t('note.saveBtn'))}</button>
+        </div>
+        <div class="note-outline" id="note-outline" style="display:none">
+          <div class="note-outline-head">${escapeHtml(t('note.outlineHead'))}</div>
+          <div class="note-outline-list" id="note-outline-list"></div>
+        </div>
+        ${savedAssignments.length > 0 ? `
+        <div class="note-outline note-assignments-block">
+          <div class="note-outline-head">${escapeHtml(t('assignments.detectedHead'))}</div>
+          <div id="note-assignments-list"></div>
+        </div>` : ''}
+      </div>
+      <div class="note-actions" id="note-actions">
+        ${hasRaw ? `
+        <div class="detail-toggle" id="note-detail-toggle">
+          <button type="button" class="detail-toggle-btn active" data-level="concise">${escapeHtml(t('note.concise'))}</button>
+          <button type="button" class="detail-toggle-btn" data-level="detailed">${escapeHtml(t('note.detailed'))}</button>
+        </div>` : ''}
+        ${hasRaw ? `<button class="ghost-btn" id="note-rebuild-btn">${icon('file', 14)}<span>${escapeHtml(t('note.rebuild'))}</span></button>` : ''}
+        ${hasRaw ? `<button class="ghost-btn" id="note-original-btn">${icon('mic', 14)}<span>${escapeHtml(t('note.whatRecorded'))}</span></button>` : ''}
+        <button class="ghost-btn" id="note-quiz-btn">${icon('help', 14)}<span>${escapeHtml(t('note.quiz'))}</span></button>
+        <button class="ghost-btn" id="note-record-btn">${icon('mic', 14)}<span>${escapeHtml(t('note.recordMore'))}</span></button>
+        <button class="ghost-btn" id="note-edit-btn">${icon('pencil', 14)}<span>${escapeHtml(t('note.edit'))}</span></button>
+        <button class="ghost-btn" id="note-copy-btn">${icon('copy', 14)}<span>${escapeHtml(t('note.copy'))}</span></button>
+      </div>
     </div>
   `;
   setContent(wrapper);
   wrapper.querySelector('#note-copy-btn').addEventListener('click', () => window.lectureApp.copyNotes(markdown));
   wrapper.querySelector('#note-record-btn').addEventListener('click', () => openRecordingView(subject, lecture));
+  if (savedAssignments.length > 0) {
+    const listEl = wrapper.querySelector('#note-assignments-list');
+    for (const entry of savedAssignments) listEl.appendChild(assignmentRow(entry));
+  }
 
   const renderEl = wrapper.querySelector('#note-render');
   const editorEl = wrapper.querySelector('#note-editor');
@@ -785,11 +880,46 @@ async function openNote(subject, lecture, backTo) {
   const originalBtn = wrapper.querySelector('#note-original-btn');
   const quizBtn = wrapper.querySelector('#note-quiz-btn');
   const detailToggle = wrapper.querySelector('#note-detail-toggle');
+  const outlineEl = wrapper.querySelector('#note-outline');
+  const outlineListEl = wrapper.querySelector('#note-outline-list');
   editorEl.value = markdown;
 
   let showingQuiz = false;
   let quizText = null;
   let selectedDetailLevel = 'concise';
+
+  // A quick jump-to-section list, built from the conspect's own "## "
+  // headings - clicking one scrolls that part of the note into view and
+  // flashes it briefly, so it's obvious which section you landed on.
+  function renderOutline() {
+    const headings = extractHeadings(markdown);
+    outlineListEl.innerHTML = '';
+    if (headings.length === 0) {
+      outlineEl.style.display = 'none';
+      return;
+    }
+    outlineEl.style.display = '';
+    for (const h of headings) {
+      const row = document.createElement('div');
+      row.className = 'note-outline-row';
+      row.style.paddingLeft = `${(h.level - 2) * 12 + 8}px`;
+      row.textContent = h.text;
+      row.addEventListener('click', () => jumpToHeading(h.id));
+      outlineListEl.appendChild(row);
+    }
+  }
+
+  function jumpToHeading(id) {
+    const target = renderEl.querySelector(`#${id}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    target.classList.remove('note-heading-flash');
+    void target.offsetWidth; // restart the CSS animation if clicked again
+    target.classList.add('note-heading-flash');
+    target.addEventListener('animationend', () => target.classList.remove('note-heading-flash'), { once: true });
+  }
+
+  renderOutline();
 
   if (detailToggle) {
     detailToggle.querySelectorAll('.detail-toggle-btn').forEach((btn) => {
@@ -809,22 +939,26 @@ async function openNote(subject, lecture, backTo) {
     if (originalBtn) originalBtn.style.display = editing ? 'none' : 'inline-flex';
     if (detailToggle) detailToggle.style.display = editing ? 'none' : 'flex';
     quizBtn.style.display = editing ? 'none' : 'inline-flex';
+    if (editing) outlineEl.style.display = 'none';
+    else renderOutline();
   }
 
   function showNotes() {
     showingOriginal = false;
     showingQuiz = false;
-    renderEl.innerHTML = renderMarkdown(markdown) || '<p class="hint">Пока пусто.</p>';
-    if (originalBtn) originalBtn.innerHTML = `${icon('mic', 14)}<span>Что записалось</span>`;
-    quizBtn.innerHTML = `${icon('help', 14)}<span>Проверь себя</span>`;
+    renderEl.innerHTML = renderMarkdown(markdown) || `<p class="hint">${escapeHtml(t('note.empty'))}</p>`;
+    if (originalBtn) originalBtn.innerHTML = `${icon('mic', 14)}<span>${escapeHtml(t('note.whatRecorded'))}</span>`;
+    quizBtn.innerHTML = `${icon('help', 14)}<span>${escapeHtml(t('note.quiz'))}</span>`;
+    renderOutline();
   }
 
   function showOriginal() {
     showingOriginal = true;
     showingQuiz = false;
     renderEl.innerHTML = renderOriginalHtml();
-    if (originalBtn) originalBtn.innerHTML = `${icon('file', 14)}<span>Показать конспект</span>`;
-    quizBtn.innerHTML = `${icon('help', 14)}<span>Проверь себя</span>`;
+    if (originalBtn) originalBtn.innerHTML = `${icon('file', 14)}<span>${escapeHtml(t('note.showConspect'))}</span>`;
+    quizBtn.innerHTML = `${icon('help', 14)}<span>${escapeHtml(t('note.quiz'))}</span>`;
+    outlineEl.style.display = 'none';
   }
 
   async function showQuiz() {
@@ -834,23 +968,24 @@ async function openNote(subject, lecture, backTo) {
     }
     showingOriginal = false;
     showingQuiz = true;
-    if (originalBtn) originalBtn.innerHTML = `${icon('mic', 14)}<span>Что записалось</span>`;
+    if (originalBtn) originalBtn.innerHTML = `${icon('mic', 14)}<span>${escapeHtml(t('note.whatRecorded'))}</span>`;
+    outlineEl.style.display = 'none';
     if (quizText !== null) {
       renderEl.innerHTML = renderMarkdown(quizText);
-      quizBtn.innerHTML = `${icon('file', 14)}<span>К конспекту</span>`;
+      quizBtn.innerHTML = `${icon('file', 14)}<span>${escapeHtml(t('note.quizBack'))}</span>`;
       return;
     }
     const original = quizBtn.innerHTML;
     quizBtn.disabled = true;
-    quizBtn.innerHTML = `${rubyGemSvg(14)}<span>Готовлю тест…</span>`;
-    renderEl.innerHTML = `<p class="hint">Готовлю вопросы по конспекту…</p>`;
+    quizBtn.innerHTML = `${rubyGemSvg(14)}<span>${escapeHtml(t('note.quizPreparing'))}</span>`;
+    renderEl.innerHTML = `<p class="hint">${escapeHtml(t('note.quizPreparing'))}</p>`;
     try {
       quizText = await window.lectureApp.generateQuiz(subject, lecture.folderName);
       renderEl.innerHTML = renderMarkdown(quizText);
-      quizBtn.innerHTML = `${icon('file', 14)}<span>К конспекту</span>`;
+      quizBtn.innerHTML = `${icon('file', 14)}<span>${escapeHtml(t('note.quizBack'))}</span>`;
     } catch (err) {
       showingQuiz = false;
-      renderEl.innerHTML = `<p class="hint" style="color:var(--danger)">Не удалось собрать тест: ${escapeHtml(String(err.message || err))}</p>`;
+      renderEl.innerHTML = `<p class="hint" style="color:var(--danger)">${escapeHtml(t('note.quizFailed', { error: String(err.message || err) }))}</p>`;
       quizBtn.innerHTML = original;
     } finally {
       quizBtn.disabled = false;
@@ -863,7 +998,7 @@ async function openNote(subject, lecture, backTo) {
     if (!rebuildBtn) return;
     const original = rebuildBtn.innerHTML;
     rebuildBtn.disabled = true;
-    rebuildBtn.innerHTML = `${rubyGemSvg(14)}<span>Собираю конспект…</span>`;
+    rebuildBtn.innerHTML = `${rubyGemSvg(14)}<span>${escapeHtml(t('note.rebuilding'))}</span>`;
     try {
       markdown = await window.lectureApp.rebuildLectureNotes(subject, lecture.folderName, selectedDetailLevel);
       editorEl.value = markdown;
@@ -874,10 +1009,10 @@ async function openNote(subject, lecture, backTo) {
       if (!showingOriginal && !showingQuiz) {
         const raw = String(err.message || err);
         const message = /503|UNAVAILABLE|overloaded|высок(?:ий|ая) спрос/i.test(raw)
-          ? 'Gemini сейчас перегружен — это временно. Попробуй пересобрать ещё раз через минуту.'
+          ? t('note.rebuildFailedOverload')
           : /429|rate.?limit/i.test(raw)
-            ? 'Groq на секунду ограничил скорость (лимит токенов в минуту) — это временно, попробуй пересобрать ещё раз через полминуты.'
-            : `Не удалось собрать конспект: ${raw}`;
+            ? t('note.rebuildFailedRateLimit')
+            : t('note.rebuildFailedGeneric', { error: raw });
         renderEl.innerHTML = `<p class="hint" style="color:var(--danger)">${escapeHtml(message)}</p>`;
       }
     } finally {
@@ -919,13 +1054,13 @@ async function openNote(subject, lecture, backTo) {
 
 async function renderSearchResults() {
   libraryState.view = 'search';
-  libTitle.textContent = 'Результаты поиска';
+  libTitle.textContent = t('library.searchResults');
   libBackBtn.style.display = 'none';
   document.getElementById('lib-chat-btn').style.display = 'none';
 
   const { subjects, lectures } = await window.lectureApp.searchLectures(searchInput.value.trim());
   if (subjects.length === 0 && lectures.length === 0) {
-    setContent(emptyState('Ничего не найдено.'));
+    setContent(emptyState(t('library.notFound')));
     return;
   }
   const grid = document.createElement('div');
@@ -935,13 +1070,13 @@ async function renderSearchResults() {
     grid.appendChild(
       subjectCard(subject, count, () => openSubject(subject), {
         onRename: async () => {
-          const newName = await askText('Новое название предмета', subject);
+          const newName = await askText(t('library.renameSubjectPrompt'), subject);
           if (!newName || newName === subject) return;
           await window.lectureApp.renameSubject(subject, newName);
           renderSearchResults();
         },
         onDelete: async () => {
-          const ok = await askConfirm('Удалить предмет?', `«${subject}» вместе со всеми лекциями внутри будет удалён без возможности восстановления.`);
+          const ok = await askConfirm(t('library.deleteSubjectTitle'), t('library.deleteSubjectMsg', { name: subject }));
           if (!ok) return;
           await window.lectureApp.deleteSubject(subject);
           renderSearchResults();
@@ -988,15 +1123,15 @@ function subjectCard(subject, lectureCount, onClick, { onRename, onDelete }) {
   card.querySelector('.card-menu-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     openMenu(e.currentTarget, [
-      { label: 'Переименовать', icon: 'pencil', onClick: onRename },
-      { label: 'Удалить', icon: 'trash', danger: true, onClick: onDelete },
+      { label: t('library.rename'), icon: 'pencil', onClick: onRename },
+      { label: t('library.delete'), icon: 'trash', danger: true, onClick: onDelete },
     ]);
   });
   return card;
 }
 
 function lectureCard(lecture, subject, onClick, showSubjectTag = false) {
-  const date = new Date(lecture.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  const date = new Date(lecture.date).toLocaleDateString(getLang() === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short' });
   const card = document.createElement('div');
   card.className = 'card';
   card.innerHTML = `
@@ -1004,28 +1139,28 @@ function lectureCard(lecture, subject, onClick, showSubjectTag = false) {
     <button class="card-menu-btn">${icon('more', 16)}</button>
     <div class="card-title">${escapeHtml(lecture.title)}</div>
     ${showSubjectTag ? `<div class="search-tag">${escapeHtml(subject)}</div>` : ''}
-    <div class="card-meta">${date} · ${Math.round(lecture.durationSec / 60)} мин</div>
+    <div class="card-meta">${date} · ${Math.round(lecture.durationSec / 60)} ${getLang() === 'en' ? 'min' : 'мин'}</div>
   `;
   card.addEventListener('click', () => onClick());
   card.querySelector('.card-menu-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     openMenu(e.currentTarget, [
       {
-        label: 'Переименовать',
+        label: t('library.rename'),
         icon: 'pencil',
         onClick: async () => {
-          const newTitle = await askText('Новое название лекции', lecture.title);
+          const newTitle = await askText(t('library.renameLecturePrompt'), lecture.title);
           if (!newTitle || newTitle === lecture.title) return;
           await window.lectureApp.renameLecture(subject, lecture.folderName, newTitle);
           libraryState.view === 'search' ? renderSearchResults() : openSubject(subject);
         },
       },
       {
-        label: 'Удалить',
+        label: t('library.delete'),
         icon: 'trash',
         danger: true,
         onClick: async () => {
-          const ok = await askConfirm('Удалить лекцию?', `«${lecture.title}» будет удалена без возможности восстановления.`);
+          const ok = await askConfirm(t('library.deleteLectureTitle'), t('library.deleteLectureMsg', { name: lecture.title }));
           if (!ok) return;
           await window.lectureApp.deleteLecture(subject, lecture.folderName);
           libraryState.view === 'search' ? renderSearchResults() : openSubject(subject);
@@ -1056,112 +1191,103 @@ let currentThreadId = null;
 let chatHistory = []; // { role: 'user'|'model', text } - the currently open thread's messages
 let chatBackAction = null; // () => void, or null to hide the back button
 
-const chatThreadsEl = document.getElementById('chat-threads');
 const chatThreadViewEl = document.getElementById('chat-thread-view');
+const chatSidebarListEl = document.getElementById('chat-sidebar-list');
 
 document.getElementById('chat-back-btn').innerHTML = icon('chevronLeft', 18);
 document.getElementById('chat-back-btn').addEventListener('click', () => {
   if (chatBackAction) chatBackAction();
 });
-document.getElementById('chat-list-btn').innerHTML = `${icon('list', 14)}<span>Все чаты</span>`;
-document.getElementById('chat-list-btn').addEventListener('click', () => openChatThreadGrid());
+document.getElementById('chat-sidebar-new-btn').innerHTML = `${icon('plus', 14)}<span>${escapeHtml(t('chat.sidebarNew'))}</span>`;
+document.getElementById('chat-sidebar-new-btn').addEventListener('click', async () => {
+  const thread = await window.lectureApp.createChatThread(t('chat.newChatTitle'));
+  await renderChatSidebar();
+  openChatThread(thread.id);
+});
 
 function setChatBack(action) {
   chatBackAction = action;
   document.getElementById('chat-back-btn').style.display = action ? '' : 'none';
 }
 
-function chatThreadCard(thread, onClick, { onRename, onDelete }) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = `
-    <div class="card-tile" style="background:var(--bg-active); color:var(--text-muted)">${icon('chat', 18)}</div>
-    <button class="card-menu-btn">${icon('more', 16)}</button>
-    <div class="card-title">${escapeHtml(thread.title)}</div>
-    <div class="card-meta">${thread.messageCount} ${pluralForm(thread.messageCount, 'сообщение', 'сообщения', 'сообщений')}</div>
+function chatSidebarRow(thread) {
+  const row = document.createElement('div');
+  row.className = 'chat-sidebar-row' + (thread.id === currentThreadId ? ' active' : '');
+  row.innerHTML = `
+    <span class="chat-sidebar-row-title">${escapeHtml(thread.title)}</span>
+    <button class="chat-sidebar-row-menu">${icon('more', 14)}</button>
   `;
-  card.addEventListener('click', onClick);
-  card.querySelector('.card-menu-btn').addEventListener('click', (e) => {
+  row.addEventListener('click', () => openChatThread(thread.id));
+  row.querySelector('.chat-sidebar-row-menu').addEventListener('click', (e) => {
     e.stopPropagation();
     openMenu(e.currentTarget, [
-      { label: 'Переименовать', icon: 'pencil', onClick: onRename },
-      { label: 'Удалить', icon: 'trash', danger: true, onClick: onDelete },
+      {
+        label: t('library.rename'),
+        icon: 'pencil',
+        onClick: async () => {
+          const newTitle = await askText(t('chat.renameTitle'), thread.title);
+          if (!newTitle || newTitle === thread.title) return;
+          await window.lectureApp.renameChatThread(thread.id, newTitle);
+          if (thread.id === currentThreadId) document.getElementById('chat-title').textContent = newTitle;
+          renderChatSidebar();
+        },
+      },
+      {
+        label: t('library.delete'),
+        icon: 'trash',
+        danger: true,
+        onClick: async () => {
+          const ok = await askConfirm(t('chat.deleteTitle'), t('chat.deleteMsg', { title: thread.title }));
+          if (!ok) return;
+          await window.lectureApp.deleteChatThread(thread.id);
+          if (localStorage.getItem('lastChatThreadId') === thread.id) localStorage.removeItem('lastChatThreadId');
+          if (thread.id === currentThreadId) initChat();
+          else renderChatSidebar();
+        },
+      },
     ]);
   });
-  return card;
+  return row;
 }
 
-async function openChatThreadGrid() {
-  switchToTab('chat');
-  currentThreadId = null;
-  document.getElementById('chat-title').textContent = 'Чаты';
-  document.getElementById('chat-list-btn').style.display = 'none';
-  setChatBack(null);
-  chatThreadViewEl.style.display = 'none';
-  chatThreadsEl.style.display = '';
-
+/** Repopulates the persistent left sidebar - only general-purpose threads
+ * show here; a subject/lecture-scoped chat is reached via "Чат по
+ * предмету/лекции" instead, so it doesn't clutter this list. */
+async function renderChatSidebar() {
   const threads = await window.lectureApp.listChatThreads();
-  const generalThreads = threads.filter((t) => !t.subject && !t.folderName);
-
-  const wrapper = document.createElement('div');
-  const grid = document.createElement('div');
-  grid.className = 'card-grid';
-  grid.appendChild(newCard('Новый чат', async () => {
-    const thread = await window.lectureApp.createChatThread('Новый чат');
-    openChatThread(thread.id, { backAction: openChatThreadGrid });
-  }));
-  for (const t of generalThreads) {
-    grid.appendChild(
-      chatThreadCard(t, () => openChatThread(t.id, { backAction: openChatThreadGrid }), {
-        onRename: async () => {
-          const newTitle = await askText('Новое название чата', t.title);
-          if (!newTitle || newTitle === t.title) return;
-          await window.lectureApp.renameChatThread(t.id, newTitle);
-          openChatThreadGrid();
-        },
-        onDelete: async () => {
-          const ok = await askConfirm('Удалить чат?', `«${t.title}» будет удалён без возможности восстановления.`);
-          if (!ok) return;
-          await window.lectureApp.deleteChatThread(t.id);
-          if (localStorage.getItem('lastChatThreadId') === t.id) localStorage.removeItem('lastChatThreadId');
-          openChatThreadGrid();
-        },
-      })
-    );
-  }
-  wrapper.appendChild(grid);
-  chatThreadsEl.innerHTML = '';
-  chatThreadsEl.appendChild(wrapper);
-}
-
-async function openChatThread(id, { backAction = openChatThreadGrid } = {}) {
-  const thread = await window.lectureApp.loadChatThread(id);
-  if (!thread) {
-    openChatThreadGrid();
+  const generalThreads = threads.filter((thread) => !thread.subject && !thread.folderName);
+  chatSidebarListEl.innerHTML = '';
+  if (generalThreads.length === 0) {
+    const hint = document.createElement('p');
+    hint.className = 'hint chat-sidebar-empty';
+    hint.textContent = t('chat.sidebarEmpty');
+    chatSidebarListEl.appendChild(hint);
     return;
   }
+  for (const thread of generalThreads) chatSidebarListEl.appendChild(chatSidebarRow(thread));
+}
+
+async function openChatThread(id, { backAction = null } = {}) {
+  const thread = await window.lectureApp.loadChatThread(id);
+  if (!thread) return;
   switchToTab('chat');
   currentThreadId = id;
   chatHistory = thread.messages.map((m) => ({ role: m.role, text: m.text }));
-  localStorage.setItem('lastChatThreadId', id);
+  if (!thread.subject && !thread.folderName) localStorage.setItem('lastChatThreadId', id);
 
   document.getElementById('chat-title').textContent = thread.title;
-  document.getElementById('chat-list-btn').style.display = '';
   setChatBack(backAction);
-  chatThreadsEl.style.display = 'none';
   chatThreadViewEl.style.display = '';
 
   const messagesEl = document.getElementById('chat-messages');
   messagesEl.innerHTML = '';
   if (chatHistory.length === 0) {
-    messagesEl.innerHTML =
-      thread.subject || thread.folderName
-        ? '<p class="hint">Спрашивай по конспекту, проси объяснить термин, составить вопросы для самопроверки и т.п.</p>'
-        : '<p class="hint">Спроси про любой предмет — например «какое дз по математике» — я сам найду нужный конспект.</p>';
+    messagesEl.innerHTML = `<p class="hint">${escapeHtml(thread.subject || thread.folderName ? t('chat.hintScoped') : t('chat.hintGlobal'))}</p>`;
   } else {
     for (const msg of chatHistory) appendChatBubble(msg.role, msg.text);
   }
   document.getElementById('chat-input').focus();
+  renderChatSidebar();
 }
 
 /** Opens straight into a chat on launch (rather than a picker) - reopens the
@@ -1172,11 +1298,11 @@ async function initChat() {
   let thread = lastId ? await window.lectureApp.loadChatThread(lastId) : null;
   if (!thread) {
     const threads = await window.lectureApp.listChatThreads();
-    const general = threads.filter((t) => !t.subject && !t.folderName);
+    const general = threads.filter((thread) => !thread.subject && !thread.folderName);
     thread = general.length > 0 ? await window.lectureApp.loadChatThread(general[0].id) : null;
   }
-  if (!thread) thread = await window.lectureApp.createChatThread('Общий чат');
-  openChatThread(thread.id, { backAction: openChatThreadGrid });
+  if (!thread) thread = await window.lectureApp.createChatThread(t('chat.generalChatTitle'));
+  openChatThread(thread.id);
 }
 
 function appendChatBubble(role, text) {
@@ -1264,7 +1390,7 @@ async function sendChatMessage() {
 
   appendChatBubble('user', message);
   const thinkingBubble = appendChatBubble('model', '');
-  thinkingBubble.innerHTML = `<div class="thinking-row">${rubyGemSvg(16)}<span class="thinking-label">Ruby думает…</span></div>`;
+  thinkingBubble.innerHTML = `<div class="thinking-row">${rubyGemSvg(16)}<span class="thinking-label">${escapeHtml(t('chat.thinking'))}</span></div>`;
 
   const sendBtn = document.getElementById('chat-send-btn');
   sendBtn.disabled = true;
@@ -1282,7 +1408,7 @@ async function sendChatMessage() {
     thinkingBubble.innerHTML = renderMarkdown(reply) || escapeHtml(reply);
   } catch (err) {
     stopRevealTicker();
-    thinkingBubble.innerHTML = '<p class="hint" style="color:var(--danger)">Не удалось получить ответ. Попробуй ещё раз.</p>';
+    thinkingBubble.innerHTML = `<p class="hint" style="color:var(--danger)">${escapeHtml(t('chat.replyFailed'))}</p>`;
   } finally {
     streamingBubble = null;
     sendBtn.disabled = false;
@@ -1304,10 +1430,20 @@ const libraryPathInput = document.getElementById('library-path-input');
 async function checkApiStatus() {
   const { configured } = await window.lectureApp.getApiStatus();
   document.getElementById('api-key-banner').style.display = configured ? 'none' : 'block';
-  apiKeyStatus.textContent = configured ? 'Ключ сохранён и готов к работе.' : 'Ключ ещё не задан.';
+  apiKeyStatus.textContent = configured ? t('settings.apiKeyConfigured') : t('settings.apiKeyMissing');
   apiKeyStatus.className = configured ? 'hint success' : 'hint';
   return configured;
 }
+
+const uiLanguageSelect = document.getElementById('ui-language-select');
+uiLanguageSelect.value = getLang();
+uiLanguageSelect.addEventListener('change', () => {
+  setLang(uiLanguageSelect.value);
+  // Simplest reliable way to re-render every dynamically-built label in the
+  // new language - equivalent to a normal relaunch, which the app already
+  // handles cleanly (reopens straight into the last chat, etc).
+  location.reload();
+});
 
 document.getElementById('save-api-key-btn').addEventListener('click', async () => {
   const key = apiKeyInput.value.trim();
@@ -1322,9 +1458,7 @@ const groqKeyStatus = document.getElementById('groq-key-status');
 
 async function checkGroqApiStatus() {
   const { configured } = await window.lectureApp.getGroqApiStatus();
-  groqKeyStatus.textContent = configured
-    ? 'Ключ сохранён — транскрипция идёт через Groq.'
-    : 'Ключ не задан — транскрипция идёт через Gemini, как обычно.';
+  groqKeyStatus.textContent = configured ? t('settings.groqConfigured') : t('settings.groqMissing');
   groqKeyStatus.className = configured ? 'hint success' : 'hint';
 }
 
@@ -1372,7 +1506,7 @@ settingsForm.addEventListener('submit', async (e) => {
     notesDetailLevel: formData.get('notesDetailLevel'),
   };
   await window.lectureApp.saveSettings(settings);
-  settingsSaved.textContent = 'Сохранено. Хоткей применится после перезапуска приложения.';
+  settingsSaved.textContent = t('settings.savedHint');
   settingsSaved.className = 'hint success';
   setTimeout(() => (settingsSaved.textContent = ''), 4000);
 });
@@ -1406,7 +1540,7 @@ document.getElementById('onboarding-save-btn').addEventListener('click', async (
   const key = document.getElementById('onboarding-key-input').value.trim();
   const errorEl = document.getElementById('onboarding-error');
   if (!key) {
-    errorEl.textContent = 'Вставь ключ или нажми «Пропустить».';
+    errorEl.textContent = t('onboarding.apiKey.needKey');
     return;
   }
   errorEl.textContent = '';

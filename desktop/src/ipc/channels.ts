@@ -74,6 +74,12 @@ export const IPC_REVEAL_LIBRARY_FOLDER = 'reveal-library-folder';
 export const IPC_GET_LIBRARY_STATS = 'get-library-stats';
 export const IPC_GENERATE_QUIZ = 'generate-quiz';
 
+// Live detection of a spoken task/homework announcement (see
+// assignments/assignmentDetector.ts) - pushed as it happens during
+// recording, plus a way to copy one (text + slide image) to the clipboard.
+export const IPC_ASSIGNMENT_DETECTED = 'assignment-detected';
+export const IPC_COPY_ASSIGNMENT_PROMPT = 'copy-assignment-prompt';
+
 // Named, persisted chat threads (see storage/chatStore.ts) - the chat used
 // to live only in renderer memory and vanished on every restart.
 export const IPC_LIST_CHAT_THREADS = 'list-chat-threads';

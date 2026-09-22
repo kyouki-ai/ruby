@@ -36,6 +36,7 @@ import { WsServer, LectureSession } from './server/wsServer';
 import { AudioPipeline, TranscriptSegment } from './transcription/audioPipeline';
 import { SlidePipeline, SlideEntry } from './slides/slidePipeline';
 import { buildLectureNotes, generateQuizFromNotes, MarkedMoment } from './gemini/notesBuilder';
+import { detectAssignmentPhrase, AssignmentEntry } from './assignments/assignmentDetector';
 import { setApiKeys, isApiKeyConfigured } from './gemini/geminiClient';
 import { streamChatReply } from './ai/chatReply';
 import { setGroqApiKey, isGroqConfigured } from './groq/groqClient';
@@ -65,6 +66,12 @@ let transcript: TranscriptSegment[] = [];
 let slidePipeline: SlidePipeline = new SlidePipeline();
 let audioPipeline: AudioPipeline | null = null;
 let markedMoments: MarkedMoment[] = [];
+let assignments: AssignmentEntry[] = [];
+// The most recent slide seen, for pairing a detected assignment with the
+// slide that was likely on screen when it was announced - not persisted on
+// its own, just used as context at the moment of detection.
+let lastSlideText: string | null = null;
+let lastSlideScreenshotBase64: string | null = null;
 // If set, the next "stop" appends to this existing lecture instead of
 // creating a new one - picked via the "Лекция" dropdown on the Live tab.
 let targetLectureFolder: string | null = null;
@@ -206,6 +213,41 @@ function checkMarker(segment: TranscriptSegment): boolean {
   return true;
 }
 
+// A teacher tends to repeat/rephrase an assignment across a couple of
+// transcript chunks in a row - throttled so that reads as one detection,
+// not several near-duplicate notifications and list entries.
+let lastAssignmentNotifiedAt = 0;
+const ASSIGNMENT_THROTTLE_MS = 20_000;
+
+/** Checks a transcribed segment for an assignment/homework announcement, records it (with whatever slide was last seen) and notifies. */
+function checkAssignment(segment: TranscriptSegment): void {
+  if (!detectAssignmentPhrase(segment.text)) return;
+  if (Date.now() - lastAssignmentNotifiedAt < ASSIGNMENT_THROTTLE_MS) return;
+  lastAssignmentNotifiedAt = Date.now();
+
+  const entry: AssignmentEntry = {
+    offsetSec: segment.startSec,
+    text: segment.text,
+    slideText: lastSlideText,
+    slideScreenshotBase64: lastSlideScreenshotBase64,
+    detectedAt: new Date().toISOString(),
+  };
+  assignments.push(entry);
+  sendToRenderer(channels.IPC_ASSIGNMENT_DETECTED, entry);
+
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: 'Похоже, прозвучало задание',
+      body: segment.text.trim(),
+    });
+    notification.on('click', () => {
+      mainWindow?.show();
+      mainWindow?.focus();
+    });
+    notification.show();
+  }
+}
+
 /**
  * The structured conspect (headings/bullets, via Gemini) is only built once,
  * when the lecture stops - not continuously during recording. Rebuilding it
@@ -219,6 +261,9 @@ function resetLectureState(): void {
   currentSession = null;
   transcript = [];
   markedMoments = [];
+  assignments = [];
+  lastSlideText = null;
+  lastSlideScreenshotBase64 = null;
   slidePipeline = new SlidePipeline();
   audioPipeline = new AudioPipeline({
     onSegment: (segment) => {
@@ -226,6 +271,7 @@ function resetLectureState(): void {
       const marked = checkMarker(segment);
       sendToRenderer(channels.IPC_TRANSCRIPT_SEGMENT, { ...segment, marked });
       checkCallOut(segment.text);
+      checkAssignment(segment);
     },
     onError: (err) => logError('Gemini transcription error', err),
   });
@@ -265,6 +311,11 @@ function setupWsServer(): void {
       audioPipeline?.enqueueChunk(msg.pcmBase64, msg.startOffsetSec, msg.durationSec);
     },
     onSlide: (msg) => {
+      // Tracked regardless of dedup, so an assignment detected moments later
+      // can be paired with whatever was actually on screen at the time.
+      lastSlideText = msg.text || null;
+      lastSlideScreenshotBase64 = msg.screenshotBase64 || null;
+
       // Shown live regardless of dedup, purely so the user can see the
       // capture loop is actually alive - costs nothing, it's the same
       // screenshot already received, not a new Gemini call.
@@ -317,7 +368,7 @@ async function finalizeSession(): Promise<void> {
   }
   sendToRenderer(channels.IPC_NOTES_UPDATED, markdown);
 
-  const raw = { transcript, slides: slidePipeline.slides };
+  const raw = { transcript, slides: slidePipeline.slides, assignments };
 
   try {
     const meta = targetLectureFolder
@@ -357,6 +408,17 @@ function setupIpcHandlers(): void {
   });
   ipcMain.handle(channels.IPC_COPY_TEXT, (_e, text: string) => {
     clipboard.writeText(text);
+  });
+  // Copies both the prompt text and the slide image (when there is one) in
+  // one go, so pasting into another AI's chat drops in whichever of the two
+  // it accepts - most take an image paste directly.
+  ipcMain.handle(channels.IPC_COPY_ASSIGNMENT_PROMPT, (_e, promptText: string, screenshotBase64: string | null) => {
+    if (screenshotBase64) {
+      const image = nativeImage.createFromDataURL(`data:image/jpeg;base64,${screenshotBase64}`);
+      clipboard.write({ text: promptText, image });
+    } else {
+      clipboard.writeText(promptText);
+    }
   });
   ipcMain.handle(channels.IPC_OPEN_EXTENSION_FOLDER, () => {
     shell.openPath(getExtensionPath());

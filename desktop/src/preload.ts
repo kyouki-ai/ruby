@@ -3,6 +3,7 @@ import * as channels from './ipc/channels';
 import type { AppSettings } from './config';
 import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults } from './storage/libraryStore';
 import type { ChatThread, ChatThreadMeta } from './storage/chatStore';
+import type { AssignmentEntry } from './assignments/assignmentDetector';
 
 // Everything the renderer is allowed to touch. No direct Node/Electron
 // access is exposed - only this narrow, typed surface.
@@ -12,6 +13,9 @@ contextBridge.exposeInMainWorld('lectureApp', {
 
   onTranscriptSegment: (cb: (segment: { startSec: number; endSec: number; text: string }) => void) =>
     ipcRenderer.on(channels.IPC_TRANSCRIPT_SEGMENT, (_e, segment) => cb(segment)),
+
+  onAssignmentDetected: (cb: (entry: AssignmentEntry) => void) =>
+    ipcRenderer.on(channels.IPC_ASSIGNMENT_DETECTED, (_e, entry) => cb(entry)),
 
   onSlideAdded: (cb: (slide: { offsetSec: number; content: string; source: string }) => void) =>
     ipcRenderer.on(channels.IPC_SLIDE_ADDED, (_e, slide) => cb(slide)),
@@ -31,6 +35,8 @@ contextBridge.exposeInMainWorld('lectureApp', {
 
   copyNotes: (markdown: string): Promise<void> => ipcRenderer.invoke(channels.IPC_COPY_NOTES, markdown),
   copyText: (text: string): Promise<void> => ipcRenderer.invoke(channels.IPC_COPY_TEXT, text),
+  copyAssignmentPrompt: (promptText: string, screenshotBase64: string | null): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_COPY_ASSIGNMENT_PROMPT, promptText, screenshotBase64),
   openExtensionFolder: (): Promise<void> => ipcRenderer.invoke(channels.IPC_OPEN_EXTENSION_FOLDER),
 
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke(channels.IPC_WINDOW_MINIMIZE),

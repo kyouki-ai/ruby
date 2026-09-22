@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { AssignmentEntry } from '../assignments/assignmentDetector';
 
 export interface LectureMeta {
   folderName: string;
@@ -30,6 +31,8 @@ export interface RawSlideEntry {
 export interface LectureRawMaterial {
   transcript: RawTranscriptSegment[];
   slides: RawSlideEntry[];
+  // Absent on lectures saved before this feature existed.
+  assignments?: AssignmentEntry[];
 }
 
 /** Strips characters that are illegal in Windows folder names. */
@@ -331,6 +334,10 @@ export function appendToLecture(
       slides: [
         ...previousRaw.slides,
         ...additionalRaw.slides.map((s) => ({ ...s, offsetSec: s.offsetSec + previousDurationSec })),
+      ],
+      assignments: [
+        ...(previousRaw.assignments ?? []),
+        ...(additionalRaw.assignments ?? []).map((a) => ({ ...a, offsetSec: a.offsetSec + previousDurationSec })),
       ],
     };
     fs.writeFileSync(rawPath(dir), JSON.stringify(combinedRaw), 'utf-8');
