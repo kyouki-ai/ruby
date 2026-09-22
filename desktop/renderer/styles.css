@@ -544,7 +544,15 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
    the text holds a clickable outline of its "## " section headings. */
 .note-view-body { display: flex; gap: 24px; align-items: flex-start; }
 .note-main { flex: 1; min-width: 0; }
-.note-actions { width: 208px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Sticky (not fixed) so it stays put against .library-content's own scroll
+   as you scroll through a long conspect, instead of scrolling away with the
+   text - but it still scrolls normally with everything else on the note's
+   own way past. Its own max-height/overflow keeps a long outline from
+   pushing the sticky box itself past the bottom of the screen. */
+.note-actions {
+  width: 208px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px;
+  position: sticky; top: 16px; max-height: calc(100vh - 100px); overflow-y: auto;
+}
 .note-actions .ghost-btn { width: 100%; justify-content: flex-start; }
 .note-actions .detail-toggle { width: 100%; }
 .note-actions .detail-toggle-btn { flex: 1; }
