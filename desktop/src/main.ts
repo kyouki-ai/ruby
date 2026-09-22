@@ -102,10 +102,26 @@ function mimeTypeForFile(filePath: string): string {
   return 'image/jpeg';
 }
 
-function getExtensionPath(): string {
+function getBundledExtensionPath(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'extension')
     : path.join(__dirname, '..', '..', 'extension');
+}
+
+// The bundled copy lives inside this version's own install folder, so a
+// Chrome "Load unpacked" pointed straight at it breaks on every app update
+// (the old folder can vanish, or a new download extracts somewhere else
+// entirely) - forcing the user to re-link the extension every single time.
+// Mirroring it into userData instead gives Chrome one stable path across
+// versions: only files change on update, not the folder itself.
+function getStableExtensionPath(): string {
+  return path.join(app.getPath('userData'), 'extension');
+}
+
+function syncExtensionToStablePath(): void {
+  const dest = getStableExtensionPath();
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.cpSync(getBundledExtensionPath(), dest, { recursive: true });
 }
 
 function createWindow(): void {
@@ -494,7 +510,7 @@ function setupIpcHandlers(): void {
     }
   });
   ipcMain.handle(channels.IPC_OPEN_EXTENSION_FOLDER, () => {
-    shell.openPath(getExtensionPath());
+    shell.openPath(getStableExtensionPath());
   });
 
   ipcMain.handle(channels.IPC_WINDOW_MINIMIZE, () => mainWindow?.minimize());
@@ -951,6 +967,11 @@ app.whenReady().then(() => {
 
   setApiKeys(loadApiKeys());
   setGroqApiKey(loadGroqApiKey());
+  try {
+    syncExtensionToStablePath();
+  } catch (err) {
+    logError('Failed to sync browser extension to its stable path', err);
+  }
 
   createWindow();
   mainWindow?.show(); // open visibly on launch, like a normal app; tray/hotkey take over from there

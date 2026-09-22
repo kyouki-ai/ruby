@@ -25,6 +25,7 @@ const ICONS = {
   cards: '<rect x="3.2" y="6" width="9" height="7.5" rx="1.2" transform="rotate(-8 7.7 9.75)"/><rect x="5.5" y="4.2" width="9" height="7.5" rx="1.2"/>',
   download: '<path d="M9 2.5v8M5.3 7.3 9 11l3.7-3.7M3.5 13.5h11"/>',
   stop: '<rect x="5.5" y="5.5" width="7" height="7" rx="1.2" fill="currentColor" stroke="none"/>',
+  record: '<circle cx="9" cy="9" r="4.2" fill="currentColor" stroke="none"/>',
 };
 
 function icon(name, size = 18) {

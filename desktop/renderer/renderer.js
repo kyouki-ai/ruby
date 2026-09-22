@@ -2291,7 +2291,7 @@ function calendarEntryRow(entry, showDate, isToday) {
       <div class="calendar-entry-title">${escapeHtml(entry.title)}${liveNow ? `<span class="calendar-live-badge">${escapeHtml(t('calendar.liveNow'))}</span>` : ''}</div>
       ${metaParts.length ? `<div class="calendar-entry-meta">${escapeHtml(metaParts.join(' · '))}</div>` : ''}
     </div>
-    <button class="calendar-entry-record-btn" title="${escapeHtml(t('calendar.record'))}">${icon('mic', 14)}</button>
+    <button class="calendar-entry-record-btn" title="${escapeHtml(t('calendar.record'))}">${icon('record', 13)}</button>
     <button class="calendar-entry-menu-btn">${icon('more', 15)}</button>
   `;
   row.addEventListener('click', () => openScheduleModal(entry));
