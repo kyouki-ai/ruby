@@ -416,7 +416,8 @@ document.getElementById('live-help-link').addEventListener('click', (e) => {
 document.getElementById('live-back-btn').innerHTML = icon('chevronLeft', 18);
 document.getElementById('live-back-btn').addEventListener('click', () => {
   switchToTab('history');
-  openSubjectGrid();
+  if (liveBackAction) liveBackAction();
+  else openSubjectGrid();
 });
 
 // --- Live tab: connection status + transcript + notes ---
@@ -818,11 +819,17 @@ document.getElementById('copy-btn').addEventListener('click', () => {
 // once the recording actually finishes and gets saved).
 let recordingTargetSubject = null;
 
-async function openRecordingView(subject, meta) {
+// Where the live-back-btn returns to - defaults to the subjects grid, but
+// e.g. "Записать ещё" from an existing lecture's note wants back to go to
+// that exact note, not all the way up to the top.
+let liveBackAction = null;
+
+async function openRecordingView(subject, meta, returnTo) {
   recordingTargetSubject = subject;
   await window.lectureApp.setCurrentSubject(subject);
   await window.lectureApp.setRecordingTarget(meta ? meta.folderName : null);
   document.getElementById('live-target-label').textContent = meta ? `${subject} · ${meta.title}` : `${subject} · Новая лекция`;
+  liveBackAction = returnTo || null;
   switchToTab('live');
 }
 
@@ -939,7 +946,7 @@ async function openSubject(subject) {
     const title = await askText(t('library.newLecturePrompt'));
     if (!title) return;
     const meta = await window.lectureApp.createLecture(subject, title);
-    openRecordingView(subject, meta);
+    openRecordingView(subject, meta, () => openSubject(subject));
   }));
 
   for (const lecture of lectures) {
@@ -1025,7 +1032,9 @@ async function openNote(subject, lecture, backTo) {
   `;
   setContent(wrapper);
   wrapper.querySelector('#note-copy-btn').addEventListener('click', () => window.lectureApp.copyNotes(markdown));
-  wrapper.querySelector('#note-record-btn').addEventListener('click', () => openRecordingView(subject, lecture));
+  wrapper.querySelector('#note-record-btn').addEventListener('click', () =>
+    openRecordingView(subject, lecture, () => openNote(subject, lecture, backTo))
+  );
   if (savedAssignments.length > 0) {
     const listEl = wrapper.querySelector('#note-assignments-list');
     for (const entry of savedAssignments) listEl.appendChild(assignmentRow(entry));
@@ -1635,9 +1644,19 @@ document.getElementById('chat-send-btn').addEventListener('click', sendChatMessa
 document.getElementById('chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendChatMessage();
 });
-document.getElementById('chat-stop-btn').innerHTML = `${icon('winClose', 14)}<span>${escapeHtml(t('chat.stop'))}</span>`;
+document.getElementById('chat-stop-btn').innerHTML = icon('stop', 14);
+document.getElementById('chat-stop-btn').title = t('chat.stop');
 document.getElementById('chat-stop-btn').addEventListener('click', () => {
+  // Tries to cancel the actual network call (works while it's still really
+  // in flight - Gemini in particular can take a while), but Groq is often
+  // fast enough that the real reply already fully arrived and all that's
+  // left is the paced-out typing effect catching up to it. Either way,
+  // jumping the reveal straight to whatever's already been received makes
+  // Stop feel instant instead of doing nothing until the animation finishes
+  // on its own.
   window.lectureApp.chatStop();
+  streamingRevealed = streamingRaw;
+  renderRevealed();
 });
 
 // --- Flashcard review (spaced repetition) - one shared overlay for both a

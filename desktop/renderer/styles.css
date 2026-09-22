@@ -49,6 +49,18 @@
 
 * { box-sizing: border-box; }
 
+/* A soft, consistent transition on anything interactive, so hover/active/
+   focus states ease in instead of snapping - applied broadly on purpose
+   (transitions are inert until a property actually changes, so this is
+   safe even on elements whose colors never change). Transform/opacity are
+   included for the small pop/press effects added below. */
+button, a, input, select, textarea, .card, .chat-sidebar-row, .note-outline-row,
+.detail-toggle-btn, .platform-btn, .tab {
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+    opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+button:active, .card:active { transform: scale(0.98); }
+
 body {
   margin: 0;
   font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
@@ -211,7 +223,7 @@ body {
 
 main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: column; min-height: 0; }
 .tab-panel { display: none; height: 100%; min-height: 0; flex-direction: column; }
-.tab-panel.active { display: flex; }
+.tab-panel.active { display: flex; animation: fade-in-up 0.16s ease both; }
 
 .page-title { font-size: 18px; font-weight: 600; margin: 0 0 20px; }
 
@@ -388,12 +400,17 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   gap: 12px;
   padding: 4px 0 16px;
 }
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .chat-bubble {
   max-width: 640px;
   padding: 10px 14px;
   border-radius: var(--radius);
   font-size: 13.5px;
   line-height: 1.6;
+  animation: fade-in-up 0.22s ease both;
 }
 .chat-bubble-user {
   align-self: flex-end;
@@ -429,8 +446,13 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   font-size: 13.5px;
 }
 .chat-input-row input:focus { outline: none; border-color: var(--accent); }
-.chat-stop-btn { background: var(--danger); border-color: var(--danger); }
-.chat-stop-btn:hover { background: var(--danger); opacity: 0.85; }
+.chat-stop-btn {
+  width: 40px; height: 40px; flex-shrink: 0; padding: 0; align-self: auto;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 50%;
+  color: var(--danger);
+}
+.chat-stop-btn:hover { background: var(--bg-hover); border-color: var(--danger); }
 
 .library-stats {
   display: flex;
@@ -460,8 +482,9 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   min-height: 128px;
   display: flex;
   flex-direction: column;
+  animation: fade-in-up 0.22s ease both;
 }
-.card:hover { background: var(--bg-hover); border-color: var(--bg-active); }
+.card:hover { background: var(--bg-hover); border-color: var(--bg-active); transform: translateY(-1px); }
 /* A little pinned-index-card touch, echoing the site - skipped on the
    dashed "+ New" placeholder since that isn't an actual saved card yet. */
 .card:not(.card-new)::before {
@@ -519,6 +542,7 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
   min-width: 150px;
   padding: 4px;
+  animation: fade-in-up 0.14s ease both;
 }
 .dropdown-menu button {
   display: flex;
@@ -694,6 +718,14 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 
 /* ---------- Modal (prompt/confirm replacement - window.prompt is unsupported in Electron) ---------- */
 
+@keyframes modal-overlay-fade-in {
+  from { background: rgba(0, 0, 0, 0); backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0); }
+  to { background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+}
+@keyframes modal-box-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -704,7 +736,9 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: modal-overlay-fade-in 0.2s ease;
 }
+.modal-overlay .modal-box { animation: modal-box-pop-in 0.22s cubic-bezier(0.2, 0.8, 0.3, 1); }
 .modal-box {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -753,6 +787,7 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   gap: 6px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
+  animation: fade-in-up 0.18s ease both;
   border-radius: var(--radius);
   padding: 6px 8px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
@@ -781,6 +816,7 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   color: #d9ab4a;
   border-radius: var(--radius-sm);
   padding: 8px 14px;
+  animation: fade-in-up 0.2s ease both;
   margin-bottom: 12px;
   font-size: 12.5px;
 }

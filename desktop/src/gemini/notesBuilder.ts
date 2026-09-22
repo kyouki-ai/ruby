@@ -122,6 +122,20 @@ export async function buildLectureNotes(
   return detailLevel === 'detailed' ? generateLongText(prompt, DETAILED_MAX_TOKENS) : generateTextRouted(prompt);
 }
 
+// Some auto-picked Groq models (see groqClient.ts's resolveTextModel) have a
+// fairly small context window - a long "Подробно" conspect (up to ~10 pages)
+// plus the prompt instructions can exceed it outright (a real Groq 400
+// "context_length_exceeded", not a guess). Capping the input here trades a
+// bit of coverage on a huge conspect for the quiz/flashcards actually being
+// generatable at all, instead of failing outright.
+const MAX_NOTES_CHARS_FOR_DERIVED_CONTENT = 12000;
+
+function capNotesForPrompt(markdown: string): string {
+  const trimmed = markdown.trim();
+  if (trimmed.length <= MAX_NOTES_CHARS_FOR_DERIVED_CONTENT) return trimmed;
+  return trimmed.slice(0, MAX_NOTES_CHARS_FOR_DERIVED_CONTENT) + '\n\n…(конспект обрезан из-за ограничения модели)';
+}
+
 const QUIZ_PROMPT_PREFIX =
   'Ты помогаешь студенту подготовиться к зачёту по его собственному конспекту лекции. ' +
   'На основе конспекта ниже составь короткую самопроверку: 4-6 вопросов (можно смешивать открытые ' +
@@ -132,7 +146,7 @@ const QUIZ_PROMPT_PREFIX =
 
 /** A short self-check quiz generated from a saved lecture's notes - available any time after saving, not just once. */
 export function generateQuizFromNotes(markdown: string): Promise<string> {
-  return generateTextRouted(QUIZ_PROMPT_PREFIX + (markdown.trim() || '(конспект пуст)'));
+  return generateTextRouted(QUIZ_PROMPT_PREFIX + (capNotesForPrompt(markdown) || '(конспект пуст)'));
 }
 
 const FLASHCARD_PROMPT_PREFIX =
@@ -171,6 +185,6 @@ function parseFlashcardPairs(raw: string): FlashcardPair[] {
 
 /** Generates front/back flashcard pairs from a saved lecture's notes - the caller (main.ts) turns these into scheduled Flashcard records. */
 export async function generateFlashcardPairsFromNotes(markdown: string): Promise<FlashcardPair[]> {
-  const raw = await generateTextRouted(FLASHCARD_PROMPT_PREFIX + (markdown.trim() || '(конспект пуст)'));
+  const raw = await generateTextRouted(FLASHCARD_PROMPT_PREFIX + (capNotesForPrompt(markdown) || '(конспект пуст)'));
   return parseFlashcardPairs(raw);
 }
