@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import * as channels from './ipc/channels';
 import type { AppSettings } from './config';
-import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults } from './storage/libraryStore';
+import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults, SubjectMeta, LectureGroup } from './storage/libraryStore';
 import type { ChatThread, ChatThreadMeta } from './storage/chatStore';
 import type { AssignmentEntry } from './assignments/assignmentDetector';
 import type { NotesDetailLevel } from './gemini/notesBuilder';
@@ -103,8 +103,8 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_LOAD_LECTURE_RAW, subject, folderName),
   rebuildLectureNotes: (subject: string, folderName: string, detailLevel?: NotesDetailLevel): Promise<string> =>
     ipcRenderer.invoke(channels.IPC_REBUILD_LECTURE_NOTES, subject, folderName, detailLevel),
-  createLecture: (subject: string, title: string): Promise<LectureMeta> =>
-    ipcRenderer.invoke(channels.IPC_CREATE_LECTURE, subject, title),
+  createLecture: (subject: string, title: string, groupId?: string): Promise<LectureMeta> =>
+    ipcRenderer.invoke(channels.IPC_CREATE_LECTURE, subject, title, groupId),
   saveLectureMarkdown: (subject: string, folderName: string, markdown: string): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_SAVE_LECTURE_MARKDOWN, subject, folderName, markdown),
   renameLecture: (subject: string, folderName: string, newTitle: string): Promise<void> =>
@@ -113,6 +113,19 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_DELETE_LECTURE, subject, folderName),
   searchLectures: (query: string): Promise<SearchResults> =>
     ipcRenderer.invoke(channels.IPC_SEARCH_LECTURES, query),
+
+  getSubjectMeta: (subject: string): Promise<SubjectMeta> =>
+    ipcRenderer.invoke(channels.IPC_GET_SUBJECT_META, subject),
+  createLectureGroup: (subject: string, name: string): Promise<LectureGroup> =>
+    ipcRenderer.invoke(channels.IPC_CREATE_LECTURE_GROUP, subject, name),
+  renameLectureGroup: (subject: string, groupId: string, newName: string): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_RENAME_LECTURE_GROUP, subject, groupId, newName),
+  deleteLectureGroup: (subject: string, groupId: string): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_DELETE_LECTURE_GROUP, subject, groupId),
+  reorderLectureGroups: (subject: string, orderedGroupIds: string[]): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_REORDER_LECTURE_GROUPS, subject, orderedGroupIds),
+  setLecturePosition: (subject: string, folderName: string, groupId: string | null, order: number): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_SET_LECTURE_POSITION, subject, folderName, groupId, order),
 
   setCurrentSubject: (subject: string): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_SET_CURRENT_SUBJECT, subject),

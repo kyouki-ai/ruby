@@ -667,8 +667,28 @@ function setupIpcHandlers(): void {
       return markdown;
     }
   );
-  ipcMain.handle(channels.IPC_CREATE_LECTURE, (_e, subject: string, title: string) =>
-    library.saveLecture(settings.libraryPath, subject, { title, sourceUrl: '', durationSec: 0, markdown: '' })
+  ipcMain.handle(channels.IPC_CREATE_LECTURE, (_e, subject: string, title: string, groupId?: string) =>
+    library.saveLecture(settings.libraryPath, subject, { title, sourceUrl: '', durationSec: 0, markdown: '', groupId })
+  );
+  ipcMain.handle(channels.IPC_GET_SUBJECT_META, (_e, subject: string) =>
+    library.loadSubjectMeta(settings.libraryPath, subject)
+  );
+  ipcMain.handle(channels.IPC_CREATE_LECTURE_GROUP, (_e, subject: string, name: string) =>
+    library.createLectureGroup(settings.libraryPath, subject, name)
+  );
+  ipcMain.handle(channels.IPC_RENAME_LECTURE_GROUP, (_e, subject: string, groupId: string, newName: string) =>
+    library.renameLectureGroup(settings.libraryPath, subject, groupId, newName)
+  );
+  ipcMain.handle(channels.IPC_DELETE_LECTURE_GROUP, (_e, subject: string, groupId: string) =>
+    library.deleteLectureGroup(settings.libraryPath, subject, groupId)
+  );
+  ipcMain.handle(channels.IPC_REORDER_LECTURE_GROUPS, (_e, subject: string, orderedGroupIds: string[]) =>
+    library.reorderLectureGroups(settings.libraryPath, subject, orderedGroupIds)
+  );
+  ipcMain.handle(
+    channels.IPC_SET_LECTURE_POSITION,
+    (_e, subject: string, folderName: string, groupId: string | null, order: number) =>
+      library.setLecturePosition(settings.libraryPath, subject, folderName, groupId, order)
   );
   ipcMain.handle(channels.IPC_SAVE_LECTURE_MARKDOWN, (_e, subject: string, folderName: string, markdown: string) =>
     library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown)

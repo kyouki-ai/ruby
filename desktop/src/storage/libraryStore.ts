@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { AssignmentEntry } from '../assignments/assignmentDetector';
 
 export interface LectureMeta {
@@ -14,6 +15,95 @@ export interface LectureMeta {
   // conspect - lets the UI offer/auto-trigger a rebuild instead of treating
   // the dump as the final result.
   notesFailed?: boolean;
+  // References a SubjectMeta.groups[].id - absent/dangling (group deleted)
+  // means the card renders in the subject's "ungrouped" area. Groups are
+  // free-form (user names them "Лекция", "Практика", "Лабораторная", ...)
+  // rather than a fixed enum, so this is a plain string, not a union type.
+  groupId?: string;
+  // Manual drag-and-drop position (within a group, or within "ungrouped").
+  // Uses fractional/midpoint insertion so moving one card only ever
+  // rewrites that one card's meta.json - see setLecturePosition.
+  order: number;
+}
+
+export interface LectureGroup {
+  id: string;
+  name: string;
+}
+
+export interface SubjectMeta {
+  groups: LectureGroup[];
+}
+
+function subjectMetaPath(libraryPath: string, subject: string): string {
+  return path.join(libraryPath, subject, 'subject.json');
+}
+
+export function loadSubjectMeta(libraryPath: string, subject: string): SubjectMeta {
+  try {
+    const raw = fs.readFileSync(subjectMetaPath(libraryPath, subject), 'utf-8');
+    const parsed = JSON.parse(raw);
+    const groups: LectureGroup[] = Array.isArray(parsed.groups)
+      ? parsed.groups
+          .filter((g: unknown): g is { id: unknown; name: unknown } => typeof g === 'object' && g !== null)
+          .filter((g: { id: unknown; name: unknown }) => typeof g.id === 'string' && typeof g.name === 'string')
+          .map((g: { id: string; name: string }) => ({ id: g.id, name: g.name }))
+      : [];
+    return { groups };
+  } catch {
+    return { groups: [] };
+  }
+}
+
+export function saveSubjectMeta(libraryPath: string, subject: string, meta: SubjectMeta): void {
+  fs.mkdirSync(path.join(libraryPath, subject), { recursive: true });
+  fs.writeFileSync(subjectMetaPath(libraryPath, subject), JSON.stringify(meta, null, 2), 'utf-8');
+}
+
+/** Creates a new named group ("Лекция", "Практика", "Лабораторная", or anything else the user types). */
+export function createLectureGroup(libraryPath: string, subject: string, name: string): LectureGroup {
+  const meta = loadSubjectMeta(libraryPath, subject);
+  const group: LectureGroup = { id: randomUUID(), name: sanitizeName(name) };
+  meta.groups.push(group);
+  saveSubjectMeta(libraryPath, subject, meta);
+  return group;
+}
+
+export function renameLectureGroup(libraryPath: string, subject: string, groupId: string, newName: string): void {
+  const meta = loadSubjectMeta(libraryPath, subject);
+  const group = meta.groups.find((g) => g.id === groupId);
+  if (group) group.name = sanitizeName(newName);
+  saveSubjectMeta(libraryPath, subject, meta);
+}
+
+/** Lectures that referenced this group simply fall back to "ungrouped" - their groupId is left dangling but harmless. */
+export function deleteLectureGroup(libraryPath: string, subject: string, groupId: string): void {
+  const meta = loadSubjectMeta(libraryPath, subject);
+  meta.groups = meta.groups.filter((g) => g.id !== groupId);
+  saveSubjectMeta(libraryPath, subject, meta);
+}
+
+export function reorderLectureGroups(libraryPath: string, subject: string, orderedGroupIds: string[]): void {
+  const meta = loadSubjectMeta(libraryPath, subject);
+  const byId = new Map(meta.groups.map((g) => [g.id, g]));
+  meta.groups = orderedGroupIds.map((id) => byId.get(id)).filter((g): g is LectureGroup => Boolean(g));
+  saveSubjectMeta(libraryPath, subject, meta);
+}
+
+/** Persists a drag-and-drop move: which group a lecture card now belongs to (null = ungrouped) and its position there. */
+export function setLecturePosition(
+  libraryPath: string,
+  subject: string,
+  folderName: string,
+  groupId: string | null,
+  order: number
+): void {
+  const dir = path.join(libraryPath, subject, folderName);
+  const meta = JSON.parse(fs.readFileSync(metaPath(dir), 'utf-8'));
+  if (groupId) meta.groupId = groupId;
+  else delete meta.groupId;
+  meta.order = order;
+  fs.writeFileSync(metaPath(dir), JSON.stringify(meta, null, 2), 'utf-8');
 }
 
 export interface RawTranscriptSegment {
@@ -203,6 +293,8 @@ function readMeta(subjectDir: string, folderName: string, subject: string): Lect
       date: parsed.date ?? new Date(0).toISOString(),
       durationSec: parsed.durationSec ?? 0,
       notesFailed: Boolean(parsed.notesFailed),
+      groupId: typeof parsed.groupId === 'string' ? parsed.groupId : undefined,
+      order: typeof parsed.order === 'number' ? parsed.order : new Date(parsed.date ?? 0).getTime(),
     };
   } catch {
     return null;
@@ -219,6 +311,7 @@ export function saveLecture(
     markdown: string;
     notesFailed?: boolean;
     raw?: LectureRawMaterial;
+    groupId?: string;
   }
 ): LectureMeta {
   const date = new Date();
@@ -232,6 +325,8 @@ export function saveLecture(
     date: date.toISOString(),
     durationSec: params.durationSec,
     notesFailed: Boolean(params.notesFailed),
+    groupId: params.groupId,
+    order: Date.now(),
   };
 
   fs.writeFileSync(metaPath(dir), JSON.stringify(meta, null, 2), 'utf-8');

@@ -938,21 +938,193 @@ async function openSubject(subject) {
   };
 
   const lectures = await window.lectureApp.listLectures(subject);
+  const subjectMeta = await window.lectureApp.getSubjectMeta(subject);
 
-  const grid = document.createElement('div');
-  grid.className = 'card-grid';
+  setContent(renderGroupBoard(subject, subjectMeta, lectures));
+}
 
-  grid.appendChild(newCard(t('library.newLecture'), async () => {
+// Free-form drag-and-drop board: lectures live in user-named groups
+// ("Лекция"/"Практика"/"Лабораторная"/anything else), plus a synthetic
+// "ungrouped" column (groupId null) for cards not yet sorted into one.
+let draggedLecture = null;
+
+function computeOrderBetween(prevOrder, nextOrder) {
+  if (prevOrder == null && nextOrder == null) return Date.now();
+  if (prevOrder == null) return nextOrder - 1000;
+  if (nextOrder == null) return prevOrder + 1000;
+  return (prevOrder + nextOrder) / 2;
+}
+
+function renderGroupBoard(subject, subjectMeta, lectures) {
+  const byGroup = new Map(); // groupId (or null) -> lectures[], sorted by .order
+  byGroup.set(null, []);
+  for (const group of subjectMeta.groups) byGroup.set(group.id, []);
+  for (const lecture of lectures) {
+    const key = lecture.groupId && byGroup.has(lecture.groupId) ? lecture.groupId : null;
+    byGroup.get(key).push(lecture);
+  }
+  for (const list of byGroup.values()) list.sort((a, b) => a.order - b.order);
+
+  const board = document.createElement('div');
+  board.className = 'group-board';
+
+  const columns = [...subjectMeta.groups.map((g) => ({ id: g.id, name: g.name })), { id: null, name: t('library.ungrouped') }];
+  for (const { id, name } of columns) {
+    board.appendChild(renderGroupColumn(subject, id, name, byGroup.get(id) || []));
+  }
+
+  const addGroupBtn = document.createElement('div');
+  addGroupBtn.className = 'add-group-column';
+  addGroupBtn.innerHTML = `${icon('plus', 18)}<span>${escapeHtml(t('library.addGroup'))}</span>`;
+  addGroupBtn.addEventListener('click', async () => {
+    const name = await askText(t('library.groupNamePrompt'));
+    if (!name) return;
+    await window.lectureApp.createLectureGroup(subject, name);
+    openSubject(subject);
+  });
+  board.appendChild(addGroupBtn);
+
+  return board;
+}
+
+let draggedGroupId = null;
+
+function renderGroupColumn(subject, groupId, name, lecturesInGroup) {
+  const column = document.createElement('div');
+  column.className = 'group-column';
+  column.dataset.groupId = groupId || '';
+
+  const header = document.createElement('div');
+  header.className = 'group-column-header';
+  header.innerHTML = `
+    <div class="group-column-title">${escapeHtml(name)}</div>
+    <div class="group-column-actions">
+      <button class="group-icon-btn" data-action="add" title="${escapeHtml(t('library.newLecture'))}">${icon('plus', 14)}</button>
+      ${groupId ? `<button class="group-icon-btn" data-action="menu" title="${escapeHtml(t('library.rename'))}">${icon('more', 14)}</button>` : ''}
+    </div>
+  `;
+  header.querySelector('[data-action="add"]').addEventListener('click', async () => {
     const title = await askText(t('library.newLecturePrompt'));
     if (!title) return;
-    const meta = await window.lectureApp.createLecture(subject, title);
+    const meta = await window.lectureApp.createLecture(subject, title, groupId || undefined);
     openRecordingView(subject, meta, () => openSubject(subject));
-  }));
-
-  for (const lecture of lectures) {
-    grid.appendChild(lectureCard(lecture, subject, () => openNote(subject, lecture, 'subject')));
+  });
+  const menuBtn = header.querySelector('[data-action="menu"]');
+  if (menuBtn) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openMenu(e.currentTarget, [
+        {
+          label: t('library.rename'),
+          icon: 'pencil',
+          onClick: async () => {
+            const newName = await askText(t('library.renameGroupPrompt'), name);
+            if (!newName || newName === name) return;
+            await window.lectureApp.renameLectureGroup(subject, groupId, newName);
+            openSubject(subject);
+          },
+        },
+        {
+          label: t('library.delete'),
+          icon: 'trash',
+          danger: true,
+          onClick: async () => {
+            const ok = await askConfirm(t('library.deleteGroupTitle'), t('library.deleteGroupMsg', { name }));
+            if (!ok) return;
+            await window.lectureApp.deleteLectureGroup(subject, groupId);
+            openSubject(subject);
+          },
+        },
+      ]);
+    });
   }
-  setContent(grid);
+  if (groupId) {
+    header.draggable = true;
+    header.classList.add('group-column-header-draggable');
+    header.addEventListener('dragstart', (e) => {
+      draggedGroupId = groupId;
+      e.stopPropagation();
+    });
+    header.addEventListener('dragend', () => {
+      draggedGroupId = null;
+    });
+  }
+  column.addEventListener('dragover', (e) => {
+    if (!draggedGroupId || draggedGroupId === groupId || !groupId) return;
+    e.preventDefault();
+  });
+  column.addEventListener('drop', async (e) => {
+    if (!draggedGroupId || draggedGroupId === groupId || !groupId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const board = column.parentElement;
+    const ids = [...board.querySelectorAll('.group-column')].map((c) => c.dataset.groupId).filter(Boolean);
+    const fromIdx = ids.indexOf(draggedGroupId);
+    if (fromIdx === -1) return;
+    ids.splice(fromIdx, 1);
+    ids.splice(ids.indexOf(groupId), 0, draggedGroupId);
+    await window.lectureApp.reorderLectureGroups(subject, ids);
+    openSubject(subject);
+  });
+  column.appendChild(header);
+
+  const cardsWrap = document.createElement('div');
+  cardsWrap.className = 'group-cards';
+  if (lecturesInGroup.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'group-cards-empty';
+    empty.textContent = t('library.emptyGroup');
+    cardsWrap.appendChild(empty);
+  }
+  for (const lecture of lecturesInGroup) {
+    const card = lectureCard(lecture, subject, () => openNote(subject, lecture, 'subject'));
+    card.classList.add('card-compact');
+    card.draggable = true;
+    card.dataset.folderName = lecture.folderName;
+    card.addEventListener('dragstart', (e) => {
+      draggedLecture = lecture;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => card.classList.add('dragging'), 0);
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      draggedLecture = null;
+    });
+    cardsWrap.appendChild(card);
+  }
+
+  cardsWrap.addEventListener('dragover', (e) => {
+    if (!draggedLecture) return;
+    e.preventDefault();
+    cardsWrap.classList.add('drag-over');
+  });
+  cardsWrap.addEventListener('dragleave', (e) => {
+    if (e.target === cardsWrap) cardsWrap.classList.remove('drag-over');
+  });
+  cardsWrap.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    cardsWrap.classList.remove('drag-over');
+    const dropped = draggedLecture;
+    if (!dropped) return;
+
+    const others = lecturesInGroup.filter((l) => l.folderName !== dropped.folderName);
+    const targetCard = e.target.closest('.card');
+    let newOrder;
+    if (targetCard && targetCard.dataset.folderName && targetCard.dataset.folderName !== dropped.folderName) {
+      const targetLecture = others.find((l) => l.folderName === targetCard.dataset.folderName);
+      const idx = others.indexOf(targetLecture);
+      const prevLecture = others[idx - 1];
+      newOrder = computeOrderBetween(prevLecture ? prevLecture.order : null, targetLecture.order);
+    } else {
+      const last = others[others.length - 1];
+      newOrder = computeOrderBetween(last ? last.order : null, null);
+    }
+    await window.lectureApp.setLecturePosition(subject, dropped.folderName, groupId, newOrder);
+    openSubject(subject);
+  });
+
+  column.appendChild(cardsWrap);
+  return column;
 }
 
 async function openNote(subject, lecture, backTo) {

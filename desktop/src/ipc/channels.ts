@@ -77,6 +77,16 @@ export const IPC_REVEAL_LIBRARY_FOLDER = 'reveal-library-folder';
 export const IPC_GET_LIBRARY_STATS = 'get-library-stats';
 export const IPC_GENERATE_QUIZ = 'generate-quiz';
 
+// Free-form lecture groups within a subject ("Лекция"/"Практика"/
+// "Лабораторная"/anything else the user types) - drag-and-drop board, not a
+// fixed lecture/practice split.
+export const IPC_GET_SUBJECT_META = 'get-subject-meta';
+export const IPC_CREATE_LECTURE_GROUP = 'create-lecture-group';
+export const IPC_RENAME_LECTURE_GROUP = 'rename-lecture-group';
+export const IPC_DELETE_LECTURE_GROUP = 'delete-lecture-group';
+export const IPC_REORDER_LECTURE_GROUPS = 'reorder-lecture-groups';
+export const IPC_SET_LECTURE_POSITION = 'set-lecture-position';
+
 // Live detection of a spoken task/homework announcement (see
 // assignments/assignmentDetector.ts) - pushed as it happens during
 // recording, plus a way to copy one (text + slide image) to the clipboard.
