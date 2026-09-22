@@ -11,10 +11,11 @@ export function streamChatReply(
   history: ChatTurn[],
   newMessage: string,
   isGlobalScope: boolean,
-  onDelta: (text: string) => void
+  onDelta: (text: string) => void,
+  signal?: AbortSignal
 ): Promise<string> {
   if (!isGroqConfigured()) {
-    return streamChatReplyGemini(contextMarkdown, history, newMessage, isGlobalScope, onDelta);
+    return streamChatReplyGemini(contextMarkdown, history, newMessage, isGlobalScope, onDelta, signal);
   }
 
   const messages: GroqChatMessage[] = [
@@ -26,5 +27,5 @@ export function streamChatReply(
     { role: 'user', content: newMessage },
   ];
 
-  return streamChatWithGroq(messages, onDelta);
+  return streamChatWithGroq(messages, onDelta, signal);
 }

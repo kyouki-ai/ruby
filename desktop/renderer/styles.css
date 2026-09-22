@@ -429,6 +429,8 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   font-size: 13.5px;
 }
 .chat-input-row input:focus { outline: none; border-color: var(--accent); }
+.chat-stop-btn { background: var(--danger); border-color: var(--danger); }
+.chat-stop-btn:hover { background: var(--danger); opacity: 0.85; }
 
 .library-stats {
   display: flex;
@@ -697,6 +699,8 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   inset: 0;
   z-index: 200;
   background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -713,6 +717,17 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 .modal-box-wide { width: 480px; max-height: 80vh; overflow-y: auto; text-align: left; }
 .modal-box-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .modal-box-head h3 { margin: 0; }
+
+.settings-modal-box {
+  width: 640px;
+  max-height: 82vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.settings-modal-box .modal-box-head { flex-shrink: 0; margin-bottom: 14px; }
+.settings-modal-scroll { overflow-y: auto; min-height: 0; padding-right: 6px; }
+.settings-modal-box .settings-form { max-width: none; overflow-y: visible; }
 .modal-box input {
   width: 100%;
   background: var(--bg);

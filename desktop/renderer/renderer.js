@@ -360,26 +360,15 @@ document.getElementById('open-extension-folder-btn').addEventListener('click', (
 
 // --- Views: the app opens straight into the AI chat (no folder to pick
 // first) - "Мои предметы" is one toggle away for browsing/recording.
-// Settings and the recording screen are reached via icon buttons /
-// navigation from inside either, each with its own way back. ---
-let lastMainMode = 'chat'; // remembers chat vs. library so settings/help "back" returns to the right one
-
+// Settings is a modal overlay on top of whichever mode was active, not a
+// tab of its own, so there's nothing for it to navigate back to. ---
 function switchToTab(tabName) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${tabName}`));
-  // The chat/library toggle only reflects those two modes - settings and the
-  // recording screen are reached "on top" of whichever mode you were in.
+  // The chat/library toggle only reflects those two modes - the recording
+  // screen is reached "on top" of whichever mode was active.
   if (tabName === 'chat' || tabName === 'history') {
     document.getElementById('mode-chat-btn').classList.toggle('active', tabName === 'chat');
     document.getElementById('mode-library-btn').classList.toggle('active', tabName === 'history');
-    lastMainMode = tabName;
-  }
-}
-
-function backToMainMode() {
-  if (lastMainMode === 'chat') switchToTab('chat');
-  else {
-    switchToTab('history');
-    openSubjectGrid();
   }
 }
 
@@ -393,9 +382,18 @@ document.getElementById('mode-library-btn').addEventListener('click', () => {
 });
 
 document.getElementById('settings-btn').innerHTML = icon('gear', 17);
-document.getElementById('settings-btn').addEventListener('click', () => switchToTab('settings'));
-document.getElementById('settings-back-btn').innerHTML = icon('chevronLeft', 18);
-document.getElementById('settings-back-btn').addEventListener('click', backToMainMode);
+document.getElementById('settings-close-btn').innerHTML = icon('winClose', 15);
+function openSettingsModal() {
+  document.getElementById('settings-modal-overlay').style.display = 'flex';
+}
+function closeSettingsModal() {
+  document.getElementById('settings-modal-overlay').style.display = 'none';
+}
+document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
+document.getElementById('settings-close-btn').addEventListener('click', closeSettingsModal);
+document.getElementById('settings-modal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'settings-modal-overlay') closeSettingsModal();
+});
 
 document.getElementById('help-btn').innerHTML = icon('help', 17);
 document.getElementById('help-close-btn').innerHTML = icon('winClose', 15);
@@ -1589,6 +1587,13 @@ window.lectureApp.onChatStreamDelta((delta) => {
 
 async function sendChatMessage() {
   if (!currentThreadId) return;
+  const sendBtn = document.getElementById('chat-send-btn');
+  // The Enter-key handler below doesn't know about `disabled` on its own -
+  // without this guard, pressing Enter again while a reply is still
+  // streaming fired a second, overlapping chatSend() that stomped on the
+  // same streamingBubble/streamingRaw globals as the first, leaving one
+  // bubble stuck on "Ruby думает…" forever and the other rendering empty.
+  if (sendBtn.disabled) return;
   const threadId = currentThreadId;
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
@@ -1599,8 +1604,10 @@ async function sendChatMessage() {
   const thinkingBubble = appendChatBubble('model', '');
   thinkingBubble.innerHTML = `<div class="thinking-row">${rubyGemSvg(16)}<span class="thinking-label">${escapeHtml(t('chat.thinking'))}</span></div>`;
 
-  const sendBtn = document.getElementById('chat-send-btn');
+  const stopBtn = document.getElementById('chat-stop-btn');
   sendBtn.disabled = true;
+  sendBtn.style.display = 'none';
+  stopBtn.style.display = 'inline-flex';
   streamingBubble = thinkingBubble;
   streamingRaw = '';
   streamingRevealed = '';
@@ -1612,19 +1619,25 @@ async function sendChatMessage() {
     streamingRaw = reply; // in case the final SSE frame lands after the promise resolves
     await waitForRevealToCatchUp();
     stopRevealTicker();
-    thinkingBubble.innerHTML = renderMarkdown(reply) || escapeHtml(reply);
+    thinkingBubble.innerHTML = renderMarkdown(reply) || `<p class="hint">${escapeHtml(t('chat.stoppedEmpty'))}</p>`;
   } catch (err) {
     stopRevealTicker();
     thinkingBubble.innerHTML = `<p class="hint" style="color:var(--danger)">${escapeHtml(t('chat.replyFailed'))}</p>`;
   } finally {
     streamingBubble = null;
     sendBtn.disabled = false;
+    sendBtn.style.display = '';
+    stopBtn.style.display = 'none';
   }
 }
 
 document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
 document.getElementById('chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendChatMessage();
+});
+document.getElementById('chat-stop-btn').innerHTML = `${icon('winClose', 14)}<span>${escapeHtml(t('chat.stop'))}</span>`;
+document.getElementById('chat-stop-btn').addEventListener('click', () => {
+  window.lectureApp.chatStop();
 });
 
 // --- Flashcard review (spaced repetition) - one shared overlay for both a

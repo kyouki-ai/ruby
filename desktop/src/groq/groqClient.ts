@@ -89,23 +89,41 @@ function parseRetryDelayMs(errorText: string): number {
  * one retry after the hinted delay is worth doing automatically instead of
  * making the user click the button again.
  */
-async function postChatCompletion(body: Record<string, unknown>, timeoutMs: number): Promise<Response> {
+async function postChatCompletion(
+  body: Record<string, unknown>,
+  timeoutMs: number,
+  externalSignal?: AbortSignal
+): Promise<Response> {
   if (!groqApiKey) throw new Error('Groq API key is not set.');
-  const send = () =>
-    fetch(GROQ_CHAT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+  // A separate internal controller, same reasoning as geminiClient's
+  // streamGemini - the timeout and an explicit "stop" both need to abort the
+  // same fetch, but only the latter should be treated as a quiet, expected
+  // stop rather than a real failure (see streamChatWithGroq's catch).
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const forwardAbort = () => controller.abort();
+  externalSignal?.addEventListener('abort', forwardAbort);
 
-  let response = await send();
-  if (response.status === 429) {
-    const delayMs = parseRetryDelayMs(await response.text());
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-    response = await send();
+  try {
+    const send = () =>
+      fetch(GROQ_CHAT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+    let response = await send();
+    if (response.status === 429 && !controller.signal.aborted) {
+      const delayMs = parseRetryDelayMs(await response.text());
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (!controller.signal.aborted) response = await send();
+    }
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', forwardAbort);
   }
-  return response;
 }
 
 export interface GroqResult {
@@ -145,44 +163,50 @@ export interface GroqChatMessage {
 /** Same idea as geminiClient's streamGemini - reads the chat completion as it streams in. */
 export async function streamChatWithGroq(
   messages: GroqChatMessage[],
-  onDelta: (text: string) => void
+  onDelta: (text: string) => void,
+  externalSignal?: AbortSignal
 ): Promise<string> {
-  const model = await resolveTextModel();
-  const response = await postChatCompletion({ model, messages, stream: true }, 45_000);
-
-  if (!response.ok || !response.body) {
-    throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
   let full = '';
+  try {
+    const model = await resolveTextModel();
+    const response = await postChatCompletion({ model, messages, stream: true }, 45_000, externalSignal);
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    if (!response.ok || !response.body) {
+      throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
+    }
 
-    const events = buffer.split('\n\n');
-    buffer = events.pop() ?? '';
-    for (const event of events) {
-      const line = event.split('\n').find((l) => l.startsWith('data: '));
-      if (!line) continue;
-      const payload = line.slice(6);
-      if (payload === '[DONE]') continue;
-      try {
-        const parsed = JSON.parse(payload);
-        const delta: string = parsed.choices?.[0]?.delta?.content ?? '';
-        if (delta) {
-          full += delta;
-          onDelta(delta);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const events = buffer.split('\n\n');
+      buffer = events.pop() ?? '';
+      for (const event of events) {
+        const line = event.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        const payload = line.slice(6);
+        if (payload === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(payload);
+          const delta: string = parsed.choices?.[0]?.delta?.content ?? '';
+          if (delta) {
+            full += delta;
+            onDelta(delta);
+          }
+        } catch {
+          // A split SSE frame straddling two reads - the tail is carried over in `buffer`.
         }
-      } catch {
-        // A split SSE frame straddling two reads - the tail is carried over in `buffer`.
       }
     }
-  }
 
-  return full;
+    return full;
+  } catch (err) {
+    if (externalSignal?.aborted) return full;
+    throw err;
+  }
 }

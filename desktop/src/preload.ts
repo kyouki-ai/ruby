@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('lectureApp', {
   ): Promise<string> => ipcRenderer.invoke(channels.IPC_CHAT_SEND, threadId, history, message),
   onChatStreamDelta: (cb: (delta: string) => void) =>
     ipcRenderer.on(channels.IPC_CHAT_STREAM_DELTA, (_e, delta) => cb(delta)),
+  chatStop: (): Promise<void> => ipcRenderer.invoke(channels.IPC_CHAT_STOP),
 
   listChatThreads: (): Promise<ChatThreadMeta[]> => ipcRenderer.invoke(channels.IPC_LIST_CHAT_THREADS),
   createChatThread: (title: string): Promise<ChatThread> =>

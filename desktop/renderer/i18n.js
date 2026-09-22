@@ -58,6 +58,8 @@ const TRANSLATIONS = {
     'chat.deleteMsg': '«{title}» будет удалён без возможности восстановления.',
     'chat.thinking': 'Ruby думает…',
     'chat.replyFailed': 'Не удалось получить ответ. Попробуй ещё раз.',
+    'chat.stop': 'Стоп',
+    'chat.stoppedEmpty': 'Остановлено — ответ ещё не успел начаться.',
     'chat.scopeSubjectTitle': 'Чат: {name}',
 
     'library.title': 'Мои предметы',
@@ -157,6 +159,7 @@ const TRANSLATIONS = {
     'help.step3': 'Нажми <b>«Загрузить распакованное расширение»</b> и выбери папку, которая откроется по кнопке ниже.',
     'help.step3Btn': 'Открыть папку с расширением',
     'help.everyTime': '<b>Каждый раз:</b> открой лекцию в браузере → нажми на иконку расширения → выбери, что записывать.',
+    'help.faqLink': 'Другой вопрос? Смотри <a href="https://kyouki-ai.github.io/ruby/help.html" target="_blank" style="color:var(--accent); text-decoration:underline;">полный список частых вопросов на сайте</a>.',
 
     'note.rebuild': 'Пересобрать конспект',
     'note.rebuilding': 'Собираю конспект…',
@@ -249,6 +252,8 @@ const TRANSLATIONS = {
     'chat.deleteMsg': '"{title}" will be deleted permanently.',
     'chat.thinking': 'Ruby is thinking…',
     'chat.replyFailed': 'Could not get a reply. Try again.',
+    'chat.stop': 'Stop',
+    'chat.stoppedEmpty': "Stopped - the reply hadn't started yet.",
     'chat.scopeSubjectTitle': 'Chat: {name}',
 
     'library.title': 'My subjects',
@@ -348,6 +353,7 @@ const TRANSLATIONS = {
     'help.step3': 'Click <b>"Load unpacked"</b> and pick the folder that opens via the button below.',
     'help.step3Btn': 'Open the extension folder',
     'help.everyTime': '<b>Every time:</b> open the lecture in the browser → click the extension icon → pick what to record.',
+    'help.faqLink': 'Something else? See the <a href="https://kyouki-ai.github.io/ruby/help.html" target="_blank" style="color:var(--accent); text-decoration:underline;">full FAQ on the site</a>.',
 
     'note.rebuild': 'Rebuild notes',
     'note.rebuilding': 'Building notes…',

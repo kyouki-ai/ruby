@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Помощь — Ruby</title>
+<meta name="description" content="Частые вопросы про Ruby — конспект лекций, который пишется сам: ключи, приватность, запись, экспорт, карточки и формулы.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root { --ink: #ece4de; --ink-dim: #b9a9a3; --paper: #150d0e; --paper-dark: #1f1214; --card: #1c1213; --red: #c23350; --red-deep: #7a1f30; --rule: rgba(194,51,80,.22); }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; }
+  h1, h2, h3 { font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; margin: 0; }
+  p { margin: 0; }
+  a { color: inherit; }
+  .mono { font-family: 'Cascadia Code', 'Courier New', monospace; }
+  ::selection { background: rgba(179,39,62,.28); }
+
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  .tab {
+    font-family: 'Cascadia Code', 'Courier New', monospace;
+    font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--ink); text-decoration: none; padding: 10px 16px 8px;
+    background: var(--paper-dark);
+    clip-path: polygon(8% 0, 92% 0, 100% 100%, 0% 100%);
+    transition: background .2s ease, color .2s ease;
+  }
+  .tab:hover { background: var(--red); color: #fff; }
+  .tab-cta { background: var(--red); color: #fff; }
+  .tab-cta:hover { background: #8f1f33; }
+
+  .tear {
+    height: 14px;
+    background:
+      linear-gradient(-45deg, transparent 7px, var(--paper) 0),
+      linear-gradient(45deg, transparent 7px, var(--paper) 0);
+    background-size: 14px 14px; background-position: left top; background-repeat: repeat-x;
+    background-color: var(--paper-dark);
+  }
+
+  .faq-section { margin-bottom: 44px; }
+  .faq-section-title {
+    font-family: 'Cascadia Code', 'Courier New', monospace; font-size: 12px; color: var(--red);
+    letter-spacing: .08em; text-transform: uppercase; margin-bottom: 14px;
+  }
+  .faq-item {
+    border-bottom: 1px dashed rgba(194,51,80,.3);
+    padding: 16px 2px;
+  }
+  .faq-item:first-child { border-top: 1px dashed rgba(194,51,80,.3); }
+  .faq-item summary {
+    cursor: pointer; list-style: none; font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary::after {
+    content: '+'; font-family: Georgia, serif; font-size: 20px; color: var(--red); flex-shrink: 0;
+    transition: transform .2s ease;
+  }
+  .faq-item[open] summary::after { transform: rotate(45deg); }
+  .faq-item p { margin-top: 12px; font-size: 13.5px; line-height: 1.65; color: #cfc3bd; }
+  .faq-item p + p { margin-top: 8px; }
+  .faq-item code {
+    font-family: 'Cascadia Code', 'Courier New', monospace; font-size: 12.5px;
+    background: var(--card); padding: 1px 5px; border-radius: 4px;
+  }
+
+  .mobile-nav-toggle { display: none; }
+  .mobile-menu { display: none; }
+  @media (max-width: 880px) {
+    .desktop-nav { display: none !important; }
+    .mobile-nav-toggle { display: flex !important; }
+    .section-pad { padding-left: 20px !important; padding-right: 20px !important; }
+  }
+  .mobile-menu.open { display: flex !important; }
+</style>
+</head>
+<body>
+
+<div style="width: 100%; overflow-x: hidden;">
+
+  <!-- NAV -->
+  <div style="position: sticky; top: 0; z-index: 40; background: var(--paper); border-bottom: 1.5px solid var(--ink);">
+    <div class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 14px 24px 0; display: flex; align-items: flex-end; gap: 22px;">
+      <a href="index.html" style="display: flex; align-items: center; gap: 8px; padding-bottom: 12px; text-decoration: none; color: inherit;">
+        <svg width="20" height="20" viewBox="0 0 18 18" style="flex-shrink: 0;">
+          <path d="M9 1.5 14.5 6 9 16.5 3.5 6Z" fill="var(--red)"/>
+          <path d="M9 1.5 14.5 6 9 6Z" fill="rgba(255,255,255,0.35)"/>
+          <path d="M3.5 6 9 6 9 16.5Z" fill="rgba(0,0,0,0.15)"/>
+        </svg>
+        <span style="font-family: Georgia, serif; font-size: 18px; font-weight: 700;">Ruby</span>
+      </a>
+      <div style="flex-grow: 1;"></div>
+      <div class="desktop-nav" style="display: flex; align-items: flex-end; gap: 6px;">
+        <a class="tab" href="index.html#features">Возможности</a>
+        <a class="tab" href="index.html#how">Как это работает</a>
+        <a class="tab" href="help.html">Помощь</a>
+        <a class="tab tab-cta" href="download.html">Скачать</a>
+      </div>
+      <button class="mobile-nav-toggle" id="mobile-nav-toggle" aria-label="Меню" style="margin-bottom: 12px; background: none; border: 1.5px solid var(--ink); width: 34px; height: 34px; align-items: center; justify-content: center; cursor: pointer; color: var(--ink);">
+        <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 5h13M2.5 9h13M2.5 13h13"/></svg>
+      </button>
+    </div>
+    <div class="mobile-menu" id="mobile-menu" style="border-top: 1px solid var(--rule); padding: 14px 24px 18px; flex-direction: column; gap: 12px; font-family: 'Cascadia Code', monospace; font-size: 13px; text-transform: uppercase;">
+      <a href="index.html#features">Возможности</a>
+      <a href="index.html#how">Как это работает</a>
+      <a href="help.html" style="color: var(--red); font-weight: 700;">Помощь</a>
+      <a href="download.html">Скачать</a>
+    </div>
+  </div>
+
+  <!-- PAGE HEADER -->
+  <div class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 56px 24px 20px;">
+    <div class="mono reveal" style="font-size: 12px; color: var(--red); letter-spacing: .08em; margin-bottom: 14px;">Тема: частые вопросы</div>
+    <h1 class="reveal" style="font-size: 40px; line-height: 1.15; letter-spacing: -.3px; max-width: 640px;">Помощь</h1>
+    <p class="reveal" style="margin-top: 18px; font-size: 15.5px; line-height: 1.65; color: #cfc3bd; max-width: 600px;">
+      Собрали здесь ответы на вопросы, которые обычно возникают в первые пять минут с Ruby — и на пару таких, что всплывают позже.
+    </p>
+  </div>
+
+  <!-- FAQ -->
+  <div class="section-pad" style="max-width: 720px; margin: 0 auto; padding: 20px 24px 100px;">
+
+    <div class="faq-section reveal">
+      <div class="faq-section-title">Начало работы</div>
+
+      <details class="faq-item">
+        <summary>Это правда бесплатно?</summary>
+        <p>Да. Ruby сама ничего не продаёт и не берёт подписок — она работает через твой собственный бесплатный ключ Gemini (и, по желанию, ещё и Groq). Оба сервиса дают бесплатный тариф без привязки карты.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Как получить ключ Gemini?</summary>
+        <p>Зайди на <code>aistudio.google.com/apikey</code>, войди с Google-аккаунтом и нажми «Create API key» — займёт меньше минуты, карта не понадобится. Вставь ключ в окне приветствия при первом запуске или позже в Настройках.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Зачем ещё и ключ Groq, если уже есть Gemini?</summary>
+        <p>Необязательно, но полезно: у бесплатного Gemini дневной лимит запросов довольно жёсткий, а расшифровка звука — самый частый вызов ИИ за лекцию. Если добавить бесплатный ключ Groq (<code>console.groq.com/keys</code>), распознавание речи уйдёт туда, а лимит Gemini останется свободен для конспекта, чата, теста и карточек.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Приложение просит «Нужен API-ключ» — что делать?</summary>
+        <p>Открой Настройки (шестерёнка вверху) и вставь ключ в поле «Gemini API». Если ключ уже вставлен, но ошибка повторяется — скорее всего, кончился дневной лимит бесплатного тарифа; попробуй на следующий день или вставь через запятую ещё один бесплатный ключ, приложение будет чередовать их.</p>
+      </details>
+    </div>
+
+    <div class="faq-section reveal">
+      <div class="faq-section-title">Запись лекции</div>
+
+      <details class="faq-item">
+        <summary>Как записать лекцию в аудитории, без браузера?</summary>
+        <p>На экране записи выбери «Офлайн-лекция в аудитории» и нажми запись с микрофона — больше ничего ставить не нужно.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Как записать онлайн-лекцию в браузере?</summary>
+        <p>Один раз нужно подключить расширение Chrome — инструкция есть по кнопке «?» вверху приложения. После этого запись из браузера можно запускать прямо из Ruby, одной кнопкой, без открытия попапа расширения.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Слайды снимаются не с той вкладки — почему?</summary>
+        <p>Звук пишется именно с той вкладки лекции, даже если переключишься на другую. А вот скриншоты слайдов снимаются с активной вкладки окна — если во время записи «Звук + слайды» переключиться на другую вкладку в том же окне, слайды начнут сниматься оттуда. Если нужно параллельно заниматься другими делами — открой лекцию в отдельном окне браузера или выбери режим «Только звук».</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Забыл нажать «Стоп» — что теперь?</summary>
+        <p>В Настройках можно включить автостоп по тишине — он выключен по умолчанию, чтобы не мешать. Если включить: при 20 минутах подряд полной тишины придёт предупреждение, а ещё через 5 минут запись остановится сама. Обычный перерыв между парами это не заденет — любой звук сбрасывает таймер, а предупреждение можно и отменить вручную кнопкой.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Можно ли дописать лекцию, если запись прервалась?</summary>
+        <p>Да — открой уже сохранённую лекцию и нажми «Записать ещё»: новая часть допишется к тому же конспекту, а не создаст отдельную лекцию.</p>
+      </details>
+    </div>
+
+    <div class="faq-section reveal">
+      <div class="faq-section-title">Конспект и учёба</div>
+
+      <details class="faq-item">
+        <summary>Конспект получился слишком коротким/длинным</summary>
+        <p>Рядом с кнопкой «Пересобрать конспект» есть переключатель «Кратко / Подробно». «Подробно» разворачивает конспект почти на весь материал лекции (вплоть до ~10 страниц) с полными объяснениями вместо сжатых буллетов.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Формулы отображаются как обычный текст</summary>
+        <p>Формулы должны рендериться автоматически (Ruby понимает LaTeX). Если конспект собирался ещё до этой возможности — просто нажми «Пересобрать конспект» ещё раз.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Что такое карточки и как работает повторение?</summary>
+        <p>По кнопке «Карточки» в конспекте Ruby сама составляет карточки вопрос-ответ по материалу лекции. Отвечай честно (Снова / Трудно / Хорошо / Легко) — интервалы до следующего показа считаются автоматически, как в Anki. Кнопка «Повторение» на экране «Мои предметы» собирает разом все карточки из всей библиотеки, которые пора повторить.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Как спросить у ИИ про несколько лекций сразу?</summary>
+        <p>Открой общий чат (не «Чат по лекции», а обычный чат слева) и просто спроси, например «какое дз по математике» — Ruby сама найдёт нужный предмет среди всех конспектов.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Можно ли выгрузить конспект как файл?</summary>
+        <p>Да, кнопка «Экспорт» рядом с «Копировать» сохраняет конспект в PDF или в файл, который открывается в Word.</p>
+      </details>
+    </div>
+
+    <div class="faq-section reveal">
+      <div class="faq-section-title">Данные и приватность</div>
+
+      <details class="faq-item">
+        <summary>Куда уходит звук лекции?</summary>
+        <p>В Gemini API (и, если подключён, в Groq) — на серверы Google/Groq — чтобы расшифровать речь и собрать конспект. Это не анонимно, и мы не делаем вид, что иначе: так работает любой облачный ИИ.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Где хранятся сами конспекты?</summary>
+        <p>Локально на твоём диске, обычными папками: предмет → лекция → <code>notes.md</code>. Их видно и без приложения. Если папку с конспектами держать внутри OneDrive/Google Drive, она будет синхронизироваться между компьютерами как обычно.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>А API-ключ где хранится?</summary>
+        <p>Тоже локально на диске, в зашифрованном виде, и никуда, кроме самого Google/Groq, не отправляется.</p>
+      </details>
+    </div>
+
+    <div class="faq-section reveal">
+      <div class="faq-section-title">Разное</div>
+
+      <details class="faq-item">
+        <summary>Есть версия для macOS или Linux?</summary>
+        <p>Пока нет — сейчас есть только сборка для Windows 10/11. Страница «Скачать» обновится, как только появятся другие платформы.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Как переключить язык интерфейса на английский?</summary>
+        <p>В Настройках есть раздел «Язык интерфейса». Он меняет только кнопки и подписи самого приложения — конспекты и ответы ИИ по-прежнему пишутся на языке лекции или вопроса.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Не нашёл ответ на свой вопрос</summary>
+        <p>Загляни в <a href="https://github.com/kyouki-ai/ruby" target="_blank" rel="noopener" style="color: var(--red); text-decoration: underline;">репозиторий на GitHub</a> — там весь исходный код и можно открыть issue.</p>
+      </details>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="tear"></div>
+  <div style="background: var(--paper-dark); padding: 26px 24px;">
+    <div class="section-pad" style="max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div class="mono" style="font-size: 12px; color: #9c8b86;">Ruby — конспект лекций, который пишется сам</div>
+      <div style="display: flex; align-items: center; gap: 18px;">
+        <a href="https://github.com/kyouki-ai/ruby" target="_blank" rel="noopener" class="mono" style="font-size: 11px; color: #9c8b86; text-decoration: underline; text-underline-offset: 2px;">GitHub</a>
+        <span class="mono" style="font-size: 11px; color: #9c8b86;">© 2026 Ruby</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  var toggleBtn = document.getElementById('mobile-nav-toggle');
+  var menu = document.getElementById('mobile-menu');
+  toggleBtn.addEventListener('click', function () { menu.classList.toggle('open'); });
+  menu.querySelectorAll('a').forEach(function (a) {
+    a.addEventListener('click', function () { menu.classList.remove('open'); });
+  });
+
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) entry.target.classList.add('visible');
+    });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.reveal').forEach(function (el) { observer.observe(el); });
+</script>
+</body>
+</html>

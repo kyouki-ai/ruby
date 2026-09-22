@@ -42,6 +42,9 @@ export const IPC_GET_EXTENSION_READY = 'get-extension-ready';
 export const IPC_CHAT_SEND = 'chat-send';
 // Pushed repeatedly during a chat-send call as the reply streams in.
 export const IPC_CHAT_STREAM_DELTA = 'chat-stream-delta';
+// Interrupts the in-flight chat-send call - it resolves with whatever text
+// streamed in so far instead of failing, same as stopping a reply in ChatGPT/Claude.
+export const IPC_CHAT_STOP = 'chat-stop';
 
 // API key
 export const IPC_GET_API_STATUS = 'get-api-status';

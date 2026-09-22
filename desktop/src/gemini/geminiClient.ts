@@ -130,52 +130,75 @@ async function callGemini(model: string, contents: unknown[], maxOutputTokens?: 
  * text the user already saw) - a stream that fails outright before any text
  * arrives just throws, same as a normal callGemini failure.
  */
-async function streamGemini(model: string, contents: unknown[], onDelta: (text: string) => void): Promise<string> {
+async function streamGemini(
+  model: string,
+  contents: unknown[],
+  onDelta: (text: string) => void,
+  externalSignal?: AbortSignal
+): Promise<string> {
   const apiKey = nextKey();
-  const response = await fetch(`${API_BASE}/${model}:streamGenerateContent?alt=sse`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
-    },
-    body: JSON.stringify({ contents }),
-    signal: AbortSignal.timeout(45_000),
-  });
-
-  if (!response.ok || !response.body) {
-    throw new Error(`Gemini request failed: ${response.status} ${await response.text()}`);
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+  // A separate internal controller (not just externalSignal itself) so the
+  // 45s timeout and an explicit "stop" both abort the same underlying fetch,
+  // while still being able to tell them apart afterward (see the catch
+  // below) - a real timeout should still fail loudly, only an explicit stop
+  // should quietly resolve with whatever text streamed in so far.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45_000);
+  const forwardAbort = () => controller.abort();
+  externalSignal?.addEventListener('abort', forwardAbort);
   let full = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    const response = await fetch(`${API_BASE}/${model}:streamGenerateContent?alt=sse`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({ contents }),
+      signal: controller.signal,
+    });
 
-    const events = buffer.split('\n\n');
-    buffer = events.pop() ?? ''; // last piece may be incomplete - keep it for next read
-    for (const event of events) {
-      const line = event.split('\n').find((l) => l.startsWith('data: '));
-      if (!line) continue;
-      try {
-        const parsed = JSON.parse(line.slice(6));
-        const delta: string = parsed.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        if (delta) {
-          full += delta;
-          onDelta(delta);
+    if (!response.ok || !response.body) {
+      throw new Error(`Gemini request failed: ${response.status} ${await response.text()}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const events = buffer.split('\n\n');
+      buffer = events.pop() ?? ''; // last piece may be incomplete - keep it for next read
+      for (const event of events) {
+        const line = event.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        try {
+          const parsed = JSON.parse(line.slice(6));
+          const delta: string = parsed.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+          if (delta) {
+            full += delta;
+            onDelta(delta);
+          }
+        } catch {
+          // A split SSE frame straddling two reads - ignore, the tail is
+          // carried over in `buffer` and reparsed once the rest arrives.
         }
-      } catch {
-        // A split SSE frame straddling two reads - ignore, the tail is
-        // carried over in `buffer` and reparsed once the rest arrives.
       }
     }
-  }
 
-  return full;
+    return full;
+  } catch (err) {
+    if (externalSignal?.aborted) return full;
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', forwardAbort);
+  }
 }
 
 function singleTurnContents(promptText: string, inlineParts: InlinePart[]): unknown[] {
@@ -276,7 +299,13 @@ export function streamChatReply(
   history: ChatTurn[],
   newMessage: string,
   isGlobalScope: boolean,
-  onDelta: (text: string) => void
+  onDelta: (text: string) => void,
+  signal?: AbortSignal
 ): Promise<string> {
-  return streamGemini(MODEL_SYNTHESIS, buildChatContents(contextMarkdown, history, newMessage, isGlobalScope), onDelta);
+  return streamGemini(
+    MODEL_SYNTHESIS,
+    buildChatContents(contextMarkdown, history, newMessage, isGlobalScope),
+    onDelta,
+    signal
+  );
 }

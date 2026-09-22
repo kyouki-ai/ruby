@@ -177,15 +177,22 @@
           <div class="chat-input-row">
             <input id="chat-input" type="text" data-i18n-placeholder="chat.inputPlaceholder" />
             <button id="chat-send-btn" class="primary-btn" data-i18n="chat.send"></button>
+            <button id="chat-stop-btn" class="primary-btn chat-stop-btn" style="display:none"></button>
           </div>
         </div>
       </section>
 
-      <section id="tab-settings" class="tab-panel">
-        <div class="library-toolbar">
-          <button id="settings-back-btn" class="icon-btn-lg"></button>
-          <h1 class="page-title" data-i18n="settings.title"></h1>
-        </div>
+    </main>
+    </div>
+  </div>
+
+  <div id="settings-modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal-box modal-box-wide settings-modal-box">
+      <div class="modal-box-head">
+        <h3 class="page-title" data-i18n="settings.title"></h3>
+        <button id="settings-close-btn" class="icon-btn-lg"></button>
+      </div>
+      <div class="settings-modal-scroll">
         <form id="settings-form" class="settings-form">
           <fieldset>
             <legend data-i18n="settings.language.legend"></legend>
@@ -271,8 +278,7 @@
           <button type="submit" class="primary-btn" data-i18n="common.save"></button>
           <span id="settings-saved" class="hint"></span>
         </form>
-      </section>
-    </main>
+      </div>
     </div>
   </div>
 
@@ -316,6 +322,7 @@
       </div>
 
       <p class="hint" style="margin-top:14px" data-i18n-html="help.everyTime"></p>
+      <p class="hint" style="margin-top:10px" data-i18n-html="help.faqLink"></p>
     </div>
   </div>
 

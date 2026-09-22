@@ -82,6 +82,8 @@ let lastSlideScreenshotBase64: string | null = null;
 // If set, the next "stop" appends to this existing lecture instead of
 // creating a new one - picked via the "Лекция" dropdown on the Live tab.
 let targetLectureFolder: string | null = null;
+// Lets the renderer's "Stop" button interrupt an in-flight chat reply.
+let currentChatAbortController: AbortController | null = null;
 
 /**
  * Path to the browser extension folder, so the "open extension folder"
@@ -566,10 +568,16 @@ function setupIpcHandlers(): void {
       const context = isGlobal
         ? library.buildFullLibraryContext(settings.libraryPath)
         : library.buildChatContext(settings.libraryPath, thread.subject!, thread.folderName ?? undefined);
+      currentChatAbortController = new AbortController();
       try {
-        const reply = await streamChatReply(context, history, message, isGlobal, (delta) => {
-          sendToRenderer(channels.IPC_CHAT_STREAM_DELTA, delta);
-        });
+        const reply = await streamChatReply(
+          context,
+          history,
+          message,
+          isGlobal,
+          (delta) => sendToRenderer(channels.IPC_CHAT_STREAM_DELTA, delta),
+          currentChatAbortController.signal
+        );
         chatStore.saveChatMessages(threadId, [
           ...history,
           { role: 'user', text: message },
@@ -579,9 +587,17 @@ function setupIpcHandlers(): void {
       } catch (err) {
         logError('Chat request failed', err);
         throw err;
+      } finally {
+        currentChatAbortController = null;
       }
     }
   );
+  // Interrupts whichever chat-send call is currently in flight (see above) -
+  // only one can run at a time (the UI disables Send while streaming), so a
+  // single shared controller is enough.
+  ipcMain.handle(channels.IPC_CHAT_STOP, () => {
+    currentChatAbortController?.abort();
+  });
 
   // Named, persisted chat threads - see storage/chatStore.ts.
   ipcMain.handle(channels.IPC_LIST_CHAT_THREADS, () => chatStore.listChatThreads());
