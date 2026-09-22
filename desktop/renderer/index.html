@@ -308,6 +308,18 @@
           <input id="schedule-title-input" type="text" required />
         </label>
 
+        <label>
+          <span data-i18n="calendar.field.category"></span>
+          <input id="schedule-category-input" type="text" list="schedule-category-options" data-i18n-placeholder="calendar.field.categoryPlaceholder" />
+          <datalist id="schedule-category-options">
+            <option data-i18n="calendar.category.lecture"></option>
+            <option data-i18n="calendar.category.practice"></option>
+            <option data-i18n="calendar.category.lab"></option>
+            <option data-i18n="calendar.category.seminar"></option>
+            <option data-i18n="calendar.category.exam"></option>
+          </datalist>
+        </label>
+
         <fieldset>
           <legend data-i18n="calendar.field.type"></legend>
           <label class="radio-label">

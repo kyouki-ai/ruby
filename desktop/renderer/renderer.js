@@ -2071,7 +2071,7 @@ function calendarEntryRow(entry, showDate = false) {
   const row = document.createElement('div');
   row.className = 'calendar-entry';
   const dateLabel = showDate && entry.date ? new Date(entry.date).toLocaleDateString(getLang() === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short' }) + ' · ' : '';
-  const metaParts = [entry.location, entry.teacher].filter(Boolean);
+  const metaParts = [entry.category, entry.location, entry.teacher].filter(Boolean);
   row.innerHTML = `
     <div class="calendar-entry-time">${escapeHtml(dateLabel)}${escapeHtml(entry.startTime)}${entry.endTime ? '–' + escapeHtml(entry.endTime) : ''}</div>
     <div class="calendar-entry-body">
@@ -2124,6 +2124,7 @@ function openScheduleModal(entry) {
   scheduleDeleteBtn.style.display = entry ? '' : 'none';
 
   document.getElementById('schedule-title-input').value = entry ? entry.title : '';
+  document.getElementById('schedule-category-input').value = entry?.category || '';
   const type = entry ? entry.type : 'weekly';
   scheduleForm.querySelector(`input[name="schedule-type"][value="${type}"]`).checked = true;
   document.getElementById('schedule-day-select').value = String(entry ? entry.dayOfWeek ?? 0 : mondayFirstDayIndex(new Date()));
@@ -2162,6 +2163,7 @@ scheduleForm.addEventListener('submit', async (e) => {
   const entry = {
     id: editingScheduleId || undefined,
     title: document.getElementById('schedule-title-input').value.trim(),
+    category: document.getElementById('schedule-category-input').value.trim() || undefined,
     type,
     dayOfWeek: type === 'weekly' ? Number(document.getElementById('schedule-day-select').value) : undefined,
     date: type === 'once' ? document.getElementById('schedule-date-input').value : undefined,

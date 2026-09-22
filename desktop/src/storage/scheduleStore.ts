@@ -19,6 +19,9 @@ export interface ScheduleEntry {
   date?: string;
   startTime: string; // "HH:MM"
   endTime: string; // "HH:MM"
+  // Free-form, like a subject's lecture groups - "Лекция"/"Практика"/
+  // "Лабораторная"/anything the user types, not a fixed enum.
+  category?: string;
   location?: string;
   teacher?: string;
   // Minutes before startTime to fire a notification; 0 = right at start time.
