@@ -4,6 +4,7 @@ import type { AppSettings } from './config';
 import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults } from './storage/libraryStore';
 import type { ChatThread, ChatThreadMeta } from './storage/chatStore';
 import type { AssignmentEntry } from './assignments/assignmentDetector';
+import type { NotesDetailLevel } from './gemini/notesBuilder';
 
 // Everything the renderer is allowed to touch. No direct Node/Electron
 // access is exposed - only this narrow, typed surface.
@@ -98,7 +99,7 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_LOAD_LECTURE, subject, folderName),
   loadLectureRaw: (subject: string, folderName: string): Promise<LectureRawMaterial | null> =>
     ipcRenderer.invoke(channels.IPC_LOAD_LECTURE_RAW, subject, folderName),
-  rebuildLectureNotes: (subject: string, folderName: string, detailLevel?: AppSettings['notesDetailLevel']): Promise<string> =>
+  rebuildLectureNotes: (subject: string, folderName: string, detailLevel?: NotesDetailLevel): Promise<string> =>
     ipcRenderer.invoke(channels.IPC_REBUILD_LECTURE_NOTES, subject, folderName, detailLevel),
   createLecture: (subject: string, title: string): Promise<LectureMeta> =>
     ipcRenderer.invoke(channels.IPC_CREATE_LECTURE, subject, title),

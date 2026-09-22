@@ -1503,7 +1503,6 @@ settingsForm.addEventListener('submit', async (e) => {
     toggleHotkey: formData.get('toggleHotkey'),
     callOutName: formData.get('callOutName').trim(),
     markerPhrase: formData.get('markerPhrase').trim(),
-    notesDetailLevel: formData.get('notesDetailLevel'),
   };
   await window.lectureApp.saveSettings(settings);
   settingsSaved.textContent = t('settings.savedHint');

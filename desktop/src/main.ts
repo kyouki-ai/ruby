@@ -35,7 +35,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 import { WsServer, LectureSession } from './server/wsServer';
 import { AudioPipeline, TranscriptSegment } from './transcription/audioPipeline';
 import { SlidePipeline, SlideEntry } from './slides/slidePipeline';
-import { buildLectureNotes, generateQuizFromNotes, MarkedMoment } from './gemini/notesBuilder';
+import { buildLectureNotes, generateQuizFromNotes, MarkedMoment, NotesDetailLevel } from './gemini/notesBuilder';
 import { detectAssignmentPhrase, AssignmentEntry } from './assignments/assignmentDetector';
 import { setApiKeys, isApiKeyConfigured } from './gemini/geminiClient';
 import { streamChatReply } from './ai/chatReply';
@@ -353,7 +353,7 @@ async function finalizeSession(): Promise<void> {
   let markdown: string;
   let notesFailed = false;
   try {
-    markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments, settings.notesDetailLevel);
+    markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
   } catch (err) {
     logError('Failed to build notes via Gemini - saving raw transcript instead', err);
     // Never lose the recording just because the notes-building call failed
@@ -466,7 +466,7 @@ function setupIpcHandlers(): void {
     // steady trickle of live slide captures - rebuild immediately instead of
     // waiting for the usual debounce.
     try {
-      const markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments, settings.notesDetailLevel);
+      const markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
       sendToRenderer(channels.IPC_NOTES_UPDATED, markdown);
     } catch (err) {
       logError('Failed to rebuild notes after attaching file', err);
@@ -572,10 +572,10 @@ function setupIpcHandlers(): void {
   // a failed build (rate limit, timeout) or an unhappy result can be retried.
   ipcMain.handle(
     channels.IPC_REBUILD_LECTURE_NOTES,
-    async (_e, subject: string, folderName: string, detailLevel?: AppSettings['notesDetailLevel']) => {
+    async (_e, subject: string, folderName: string, detailLevel?: NotesDetailLevel) => {
       const raw = library.loadLectureRaw(settings.libraryPath, subject, folderName);
       if (!raw) throw new Error('Для этой лекции не сохранена исходная запись - пересборка недоступна.');
-      const markdown = await buildLectureNotes(raw.transcript, raw.slides, [], detailLevel ?? settings.notesDetailLevel);
+      const markdown = await buildLectureNotes(raw.transcript, raw.slides, [], detailLevel);
       library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown, false);
       return markdown;
     }
