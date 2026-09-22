@@ -20,6 +20,10 @@ export interface AudioPipelineOptions {
 export class AudioPipeline {
   private queue: Array<{ pcm: Buffer; startOffsetSec: number; durationSec: number }> = [];
   private processing = false;
+  // Tracks continuous silence for the optional auto-stop-on-silence feature
+  // (see main.ts) - starts at construction time so a lecture that's silent
+  // from the very first second still counts down normally.
+  private lastSoundAt = Date.now();
 
   constructor(private options: AudioPipelineOptions) {}
 
@@ -29,8 +33,19 @@ export class AudioPipeline {
     // requests (and quota) transcribing dead air.
     if (isSilent(pcm)) return;
 
+    this.lastSoundAt = Date.now();
     this.queue.push({ pcm, startOffsetSec, durationSec });
     void this.drainQueue();
+  }
+
+  /** How long it's been since the last chunk with actual sound in it - used to warn/auto-stop on a long silence (a break, or the lecture ending). */
+  getSilenceDurationMs(): number {
+    return Date.now() - this.lastSoundAt;
+  }
+
+  /** Manual reset, e.g. when the user dismisses a silence warning - treats "now" as the last sound heard, buying another full window before it warns again. */
+  resetSilenceTimer(): void {
+    this.lastSoundAt = Date.now();
   }
 
   private async drainQueue(): Promise<void> {

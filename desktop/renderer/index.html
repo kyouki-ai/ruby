@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';" />
   <title>Ruby</title>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -131,6 +132,10 @@
             <div class="note-outline-head" data-i18n="assignments.detectedHead"></div>
             <div id="live-assignments-list"></div>
           </div>
+          <div id="silence-warning" class="silence-warning" style="display:none">
+            <span id="silence-warning-text"></span>
+            <button id="silence-warning-dismiss-btn" class="ghost-btn" data-i18n="live.silenceDismiss"></button>
+          </div>
           <div class="split">
             <div class="panel">
               <div class="panel-head"><h2 data-i18n="live.transcriptHeading"></h2></div>
@@ -152,6 +157,7 @@
           <button id="lib-back-btn" class="icon-btn-lg" style="display:none"></button>
           <h1 id="lib-title" data-i18n="library.title"></h1>
           <button id="lib-chat-btn" class="ghost-btn" style="display:none"></button>
+          <button id="lib-review-btn" class="ghost-btn" style="display:none"></button>
           <div class="toolbar-spacer"></div>
           <div class="search-box">
             <span id="search-icon"></span>
@@ -253,6 +259,15 @@
             </label>
           </fieldset>
 
+          <fieldset>
+            <legend data-i18n="settings.autoStop.legend"></legend>
+            <p class="hint" data-i18n="settings.autoStop.hint"></p>
+            <label class="checkbox-label">
+              <input type="checkbox" name="autoStopSilenceEnabled" />
+              <span data-i18n="settings.autoStop.label"></span>
+            </label>
+          </fieldset>
+
           <button type="submit" class="primary-btn" data-i18n="common.save"></button>
           <span id="settings-saved" class="hint"></span>
         </form>
@@ -304,6 +319,27 @@
     </div>
   </div>
 
+  <div id="find-bar" class="find-bar" style="display:none">
+    <span id="find-icon"></span>
+    <input id="find-input" type="text" data-i18n-placeholder="find.placeholder" />
+    <span id="find-count" class="find-count"></span>
+    <button id="find-prev-btn" class="icon-btn-lg"></button>
+    <button id="find-next-btn" class="icon-btn-lg"></button>
+    <button id="find-close-btn" class="icon-btn-lg"></button>
+  </div>
+
+  <div id="flashcard-overlay" class="modal-overlay" style="display:none">
+    <div class="modal-box flashcard-box">
+      <div class="modal-box-head">
+        <h3 id="flashcard-progress"></h3>
+        <button id="flashcard-close-btn" class="icon-btn-lg"></button>
+      </div>
+      <div id="flashcard-content" class="flashcard-content"></div>
+      <div id="flashcard-actions" class="flashcard-actions"></div>
+    </div>
+  </div>
+
+  <script src="vendor/katex/katex.min.js"></script>
   <script src="icons.js"></script>
   <script src="i18n.js"></script>
   <script src="renderer.js"></script>

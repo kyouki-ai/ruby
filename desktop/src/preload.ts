@@ -5,6 +5,7 @@ import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults } fro
 import type { ChatThread, ChatThreadMeta } from './storage/chatStore';
 import type { AssignmentEntry } from './assignments/assignmentDetector';
 import type { NotesDetailLevel } from './gemini/notesBuilder';
+import type { Flashcard, ReviewRating, DueDeckSummary } from './storage/flashcardStore';
 
 // Everything the renderer is allowed to touch. No direct Node/Electron
 // access is exposed - only this narrow, typed surface.
@@ -121,4 +122,27 @@ contextBridge.exposeInMainWorld('lectureApp', {
   getLibraryStats: (): Promise<LibraryStats> => ipcRenderer.invoke(channels.IPC_GET_LIBRARY_STATS),
   generateQuiz: (subject: string, folderName: string): Promise<string> =>
     ipcRenderer.invoke(channels.IPC_GENERATE_QUIZ, subject, folderName),
+
+  onSilenceWarning: (cb: (info: { silentForSec: number; autoStopInSec: number }) => void) =>
+    ipcRenderer.on(channels.IPC_SILENCE_WARNING, (_e, info) => cb(info)),
+  onSilenceWarningCleared: (cb: () => void) =>
+    ipcRenderer.on(channels.IPC_SILENCE_WARNING_CLEARED, () => cb()),
+  dismissSilenceWarning: (): Promise<void> => ipcRenderer.invoke(channels.IPC_DISMISS_SILENCE_WARNING),
+
+  generateFlashcards: (subject: string, folderName: string): Promise<Flashcard[]> =>
+    ipcRenderer.invoke(channels.IPC_GENERATE_FLASHCARDS, subject, folderName),
+  loadFlashcards: (subject: string, folderName: string): Promise<Flashcard[]> =>
+    ipcRenderer.invoke(channels.IPC_LOAD_FLASHCARDS, subject, folderName),
+  reviewFlashcard: (subject: string, folderName: string, cardId: string, rating: ReviewRating): Promise<Flashcard | null> =>
+    ipcRenderer.invoke(channels.IPC_REVIEW_FLASHCARD, subject, folderName, cardId, rating),
+  listDueFlashcards: (): Promise<DueDeckSummary[]> => ipcRenderer.invoke(channels.IPC_LIST_DUE_FLASHCARDS),
+
+  exportNote: (title: string, bodyHtml: string, format: 'pdf' | 'doc'): Promise<{ saved: boolean }> =>
+    ipcRenderer.invoke(channels.IPC_EXPORT_NOTE, title, bodyHtml, format),
+
+  findInPage: (text: string, forward: boolean, findNext: boolean): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_FIND_IN_PAGE, text, forward, findNext),
+  stopFindInPage: (): Promise<void> => ipcRenderer.invoke(channels.IPC_STOP_FIND_IN_PAGE),
+  onFoundInPage: (cb: (result: { activeMatchOrdinal: number; matches: number }) => void) =>
+    ipcRenderer.on(channels.IPC_FOUND_IN_PAGE, (_e, result) => cb(result)),
 });

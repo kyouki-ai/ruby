@@ -35,7 +35,14 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 import { WsServer, LectureSession } from './server/wsServer';
 import { AudioPipeline, TranscriptSegment } from './transcription/audioPipeline';
 import { SlidePipeline, SlideEntry } from './slides/slidePipeline';
-import { buildLectureNotes, generateQuizFromNotes, MarkedMoment, NotesDetailLevel } from './gemini/notesBuilder';
+import {
+  buildLectureNotes,
+  generateQuizFromNotes,
+  generateFlashcardPairsFromNotes,
+  MarkedMoment,
+  NotesDetailLevel,
+} from './gemini/notesBuilder';
+import * as flashcards from './storage/flashcardStore';
 import { detectAssignmentPhrase, AssignmentEntry } from './assignments/assignmentDetector';
 import { setApiKeys, isApiKeyConfigured } from './gemini/geminiClient';
 import { streamChatReply } from './ai/chatReply';
@@ -144,6 +151,15 @@ function createWindow(): void {
       event.preventDefault();
       mainWindow?.hide();
     }
+  });
+
+  // Ctrl+F find bar (renderer.js) - relays Chromium's own in-page search
+  // results back, since the renderer can't call webContents methods itself.
+  mainWindow.webContents.on('found-in-page', (_e, result) => {
+    sendToRenderer(channels.IPC_FOUND_IN_PAGE, {
+      activeMatchOrdinal: result.activeMatchOrdinal,
+      matches: result.matches,
+    });
   });
 }
 
@@ -282,6 +298,56 @@ function startNewSession(tabTitle: string, tabUrl: string): void {
   resetLectureState();
   currentSession = { tabTitle, tabUrl, startedAt: Date.now() };
   sendToRenderer(channels.IPC_CONNECTION_STATUS, true, tabTitle);
+  startSilenceMonitor();
+}
+
+// Auto-stop-on-silence (opt-in, see AppSettings.autoStopSilenceEnabled):
+// fires only after a MUCH longer silence than any normal between-pairs
+// break (typically 10-20 min at a Russian university) would ever produce,
+// and warns the renderer well before the actual stop so the user can just
+// keep talking - or explicitly dismiss it - to cancel it. Never stops
+// anything itself; it only ever asks the renderer to, since the renderer
+// is what already knows whether this is a mic or browser-extension session.
+const SILENCE_CHECK_INTERVAL_MS = 30_000;
+const SILENCE_WARN_MS = 20 * 60_000;
+const SILENCE_AUTOSTOP_MS = 25 * 60_000;
+
+let silenceCheckTimer: ReturnType<typeof setInterval> | null = null;
+let silenceWarningActive = false;
+
+function startSilenceMonitor(): void {
+  stopSilenceMonitor();
+  if (!settings.autoStopSilenceEnabled) return;
+  silenceCheckTimer = setInterval(checkSilence, SILENCE_CHECK_INTERVAL_MS);
+}
+
+function stopSilenceMonitor(): void {
+  if (silenceCheckTimer) {
+    clearInterval(silenceCheckTimer);
+    silenceCheckTimer = null;
+  }
+  silenceWarningActive = false;
+}
+
+function checkSilence(): void {
+  if (!audioPipeline || !currentSession) return;
+  const silentMs = audioPipeline.getSilenceDurationMs();
+
+  if (silentMs >= SILENCE_AUTOSTOP_MS) {
+    sendToRenderer(channels.IPC_SILENCE_WARNING, { silentForSec: Math.floor(silentMs / 1000), autoStopInSec: 0 });
+    stopSilenceMonitor();
+    return;
+  }
+  if (silentMs >= SILENCE_WARN_MS) {
+    silenceWarningActive = true;
+    sendToRenderer(channels.IPC_SILENCE_WARNING, {
+      silentForSec: Math.floor(silentMs / 1000),
+      autoStopInSec: Math.max(0, Math.ceil((SILENCE_AUTOSTOP_MS - silentMs) / 1000)),
+    });
+  } else if (silenceWarningActive) {
+    silenceWarningActive = false;
+    sendToRenderer(channels.IPC_SILENCE_WARNING_CLEARED);
+  }
 }
 
 let wsServer: WsServer | null = null;
@@ -343,6 +409,7 @@ function setupWsServer(): void {
 
 async function finalizeSession(): Promise<void> {
   if (!currentSession) return;
+  stopSilenceMonitor();
   const durationSec = (Date.now() - currentSession.startedAt) / 1000;
 
   // Enqueuing a chunk only schedules its Gemini transcription - it doesn't
@@ -444,6 +511,10 @@ function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_STOP_MIC_SESSION, async () => {
     await finalizeSession();
     sendToRenderer(channels.IPC_CONNECTION_STATUS, false);
+  });
+  ipcMain.handle(channels.IPC_DISMISS_SILENCE_WARNING, () => {
+    audioPipeline?.resetSilenceTimer();
+    silenceWarningActive = false;
   });
 
   // Attach an existing slide deck file instead of live-capturing slides.
@@ -624,6 +695,122 @@ function setupIpcHandlers(): void {
       throw err;
     }
   });
+
+  // Flashcards with spaced repetition (see storage/flashcardStore.ts).
+  ipcMain.handle(channels.IPC_GENERATE_FLASHCARDS, async (_e, subject: string, folderName: string) => {
+    const markdown = library.loadLectureMarkdown(settings.libraryPath, subject, folderName);
+    try {
+      const pairs = await generateFlashcardPairsFromNotes(markdown);
+      const cards = flashcards.createCardsFromPairs(pairs);
+      flashcards.saveFlashcards(settings.libraryPath, subject, folderName, cards);
+      return cards;
+    } catch (err) {
+      logError('Failed to generate flashcards', err);
+      throw err;
+    }
+  });
+  ipcMain.handle(channels.IPC_LOAD_FLASHCARDS, (_e, subject: string, folderName: string) =>
+    flashcards.loadFlashcards(settings.libraryPath, subject, folderName)
+  );
+  ipcMain.handle(
+    channels.IPC_REVIEW_FLASHCARD,
+    (_e, subject: string, folderName: string, cardId: string, rating: flashcards.ReviewRating) => {
+      const cards = flashcards.loadFlashcards(settings.libraryPath, subject, folderName);
+      const updated = cards.map((c) => (c.id === cardId ? flashcards.reviewCard(c, rating) : c));
+      flashcards.saveFlashcards(settings.libraryPath, subject, folderName, updated);
+      return updated.find((c) => c.id === cardId) ?? null;
+    }
+  );
+  ipcMain.handle(channels.IPC_LIST_DUE_FLASHCARDS, () => flashcards.listDueFlashcards(settings.libraryPath));
+
+  ipcMain.handle(channels.IPC_FIND_IN_PAGE, (_e, text: string, forward: boolean, findNext: boolean) => {
+    if (!text) {
+      mainWindow?.webContents.stopFindInPage('clearSelection');
+      return;
+    }
+    mainWindow?.webContents.findInPage(text, { forward, findNext });
+  });
+  ipcMain.handle(channels.IPC_STOP_FIND_IN_PAGE, () => {
+    mainWindow?.webContents.stopFindInPage('clearSelection');
+  });
+
+  // Exports a note's already-rendered HTML (from the renderer's own
+  // renderMarkdown, so headings/bullets/KaTeX math are already real markup)
+  // to a standalone PDF, or a plain .doc that Word opens as HTML.
+  ipcMain.handle(
+    channels.IPC_EXPORT_NOTE,
+    async (_e, title: string, bodyHtml: string, format: 'pdf' | 'doc') => {
+      const safeName = title.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Конспект';
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        defaultPath: `${safeName}.${format}`,
+        filters: [format === 'pdf' ? { name: 'PDF', extensions: ['pdf'] } : { name: 'Word', extensions: ['doc'] }],
+      });
+      if (result.canceled || !result.filePath) return { saved: false };
+
+      const fullHtml = buildExportHtml(title, bodyHtml);
+
+      if (format === 'doc') {
+        fs.writeFileSync(result.filePath, fullHtml, 'utf-8');
+        return { saved: true };
+      }
+
+      // PDF via a hidden window's own print pipeline - no extra dependency
+      // needed, Electron/Chromium already does this natively.
+      const tempHtmlPath = path.join(app.getPath('temp'), `ruby-export-${Date.now()}.html`);
+      fs.writeFileSync(tempHtmlPath, fullHtml, 'utf-8');
+      const pdfWindow = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+      try {
+        await pdfWindow.loadFile(tempHtmlPath);
+        const pdfBuffer = await pdfWindow.webContents.printToPDF({});
+        fs.writeFileSync(result.filePath, pdfBuffer);
+      } finally {
+        pdfWindow.destroy();
+        fs.unlink(tempHtmlPath, () => undefined);
+      }
+      return { saved: true };
+    }
+  );
+}
+
+function escapeHtmlServer(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Wraps a note's rendered HTML into a standalone document for export - inlines KaTeX's CSS with its font url()s rewritten to absolute file:// paths, since the export lives outside renderer/ where those relative paths would otherwise resolve to nothing. */
+function buildExportHtml(title: string, bodyHtml: string): string {
+  const katexDir = path.join(__dirname, '..', 'renderer', 'vendor', 'katex');
+  const fontsUrl = `file://${path.join(katexDir, 'fonts').replace(/\\/g, '/')}/`;
+  let katexCss = '';
+  try {
+    katexCss = fs.readFileSync(path.join(katexDir, 'katex.min.css'), 'utf-8').replace(/url\(fonts\//g, `url(${fontsUrl}`);
+  } catch {
+    // Export still works without math styling if the vendored CSS is somehow missing.
+  }
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+${katexCss}
+body { font-family: -apple-system, 'Segoe UI', sans-serif; color: #16090c; padding: 32px; max-width: 760px; margin: 0 auto; }
+h1 { font-size: 22px; margin: 0 0 18px; }
+h2, h3, h4 { margin: 20px 0 8px; }
+ul { padding-left: 20px; }
+li { margin-bottom: 6px; }
+p { margin: 8px 0; }
+strong { color: #b3273e; }
+</style>
+</head>
+<body>
+<h1>${escapeHtmlServer(title)}</h1>
+${bodyHtml}
+</body>
+</html>`;
 }
 
 app.whenReady().then(() => {

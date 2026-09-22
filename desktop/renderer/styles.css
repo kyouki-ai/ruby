@@ -300,6 +300,10 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 
 .settings-form { display: flex; flex-direction: column; gap: 16px; max-width: 520px; overflow-y: auto; }
 .settings-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-muted); }
+.settings-form label.checkbox-label { flex-direction: row; align-items: center; gap: 8px; }
+.settings-form label.checkbox-label input[type="checkbox"] {
+  width: 16px; height: 16px; padding: 0; border: none; background: none; accent-color: var(--accent);
+}
 .settings-form input, .settings-form select {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -721,6 +725,72 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 }
 .modal-box input:focus { outline: none; border-color: var(--accent); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* ---------- Find bar (Ctrl+F - no built-in one for a custom BrowserWindow) ---------- */
+
+.find-bar {
+  position: fixed;
+  top: 48px;
+  right: 20px;
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+.find-bar input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 6px 9px;
+  font-size: 13px;
+  width: 200px;
+}
+.find-bar input:focus { outline: none; border-color: var(--accent); }
+.find-count { font-size: 12px; color: var(--text-dim); min-width: 42px; text-align: center; }
+
+/* ---------- Silence auto-stop warning ---------- */
+
+.silence-warning {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #8a6a1f;
+  background: rgba(184, 140, 30, 0.12);
+  color: #d9ab4a;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+}
+.silence-warning span { flex: 1; }
+
+/* ---------- Flashcards ---------- */
+
+.flashcard-box { width: 480px; }
+.flashcard-content {
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 4px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.flashcard-face p:first-child { margin-top: 0; }
+.flashcard-face p:last-child { margin-bottom: 0; }
+.flashcard-divider { border-top: 1px dashed var(--border); }
+.flashcard-back { color: var(--text-dim); }
+.flashcard-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.flashcard-rate-btn[data-rating="again"] { color: var(--danger); border-color: var(--danger); }
+.flashcard-rate-btn[data-rating="easy"] { color: var(--success); border-color: var(--success); }
 
 /* ---------- Onboarding ---------- */
 

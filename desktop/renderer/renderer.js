@@ -33,6 +33,7 @@ function askText(title, defaultValue = '') {
   modalMessage.style.display = 'none';
   modalInput.style.display = 'block';
   modalInput.value = defaultValue;
+  modalCancelBtn.style.display = '';
   modalOkBtn.textContent = t('common.ok');
   modalOkBtn.onclick = () => closeModal(modalInput.value.trim() || null);
   modalOverlay.style.display = 'flex';
@@ -46,18 +47,56 @@ function askConfirm(title, message) {
   modalMessage.textContent = message;
   modalMessage.style.display = 'block';
   modalInput.style.display = 'none';
+  modalCancelBtn.style.display = '';
   modalOkBtn.textContent = t('common.delete');
   modalOkBtn.onclick = () => closeModal(true);
   modalOverlay.style.display = 'flex';
   return new Promise((resolve) => { modalOverlay._resolve = (v) => resolve(Boolean(v)); });
 }
 
+/** Single-button informational modal (an error, a heads-up) - no cancel, since there's nothing to cancel. */
+function showAlert(title, message) {
+  modalTitle.textContent = title;
+  modalMessage.textContent = message;
+  modalMessage.style.display = 'block';
+  modalInput.style.display = 'none';
+  modalCancelBtn.style.display = 'none';
+  modalOkBtn.textContent = t('common.ok');
+  modalOkBtn.onclick = () => closeModal(true);
+  modalOverlay.style.display = 'flex';
+  return new Promise((resolve) => { modalOverlay._resolve = () => resolve(); });
+}
+
+/** Renders a LaTeX expression via KaTeX (loaded globally from vendor/katex),
+ * falling back to plain escaped text if katex isn't available or the
+ * expression is malformed - a broken formula should never break the whole
+ * render. throwOnError:false already covers most malformed input on its
+ * own (KaTeX renders a red error span instead of throwing). */
+function renderMath(expr, displayMode) {
+  try {
+    if (typeof katex === 'undefined') return escapeHtml(expr);
+    return katex.renderToString(expr, { throwOnError: false, displayMode });
+  } catch {
+    return escapeHtml(expr);
+  }
+}
+
 /** Tiny markdown -> HTML renderer covering just what notesBuilder.ts produces.
  * Headings get a stable `note-heading-N` id (N = its position among headings,
  * in document order) so the note view's outline panel can scroll straight to
- * one by index - harmless for the other places this renders (chat replies). */
+ * one by index - harmless for the other places this renders (chat replies).
+ * "$$...$$" display-math blocks are pulled out before line-splitting (they
+ * can span multiple lines) and swapped back in as rendered KaTeX afterward;
+ * inline "$...$" math is handled the same way inside inlineMarkdown. */
 function renderMarkdown(markdown) {
-  const lines = markdown.split('\n');
+  const mathBlocks = [];
+  const withPlaceholders = markdown.replace(/\$\$([\s\S]+?)\$\$/g, (_m, expr) => {
+    const token = `@@MATH_BLOCK_${mathBlocks.length}@@`;
+    mathBlocks.push(renderMath(expr.trim(), true));
+    return token;
+  });
+
+  const lines = withPlaceholders.split('\n');
   let html = '';
   let inList = false;
   let headingIndex = 0;
@@ -85,6 +124,10 @@ function renderMarkdown(markdown) {
     }
   }
   closeList();
+
+  mathBlocks.forEach((rendered, i) => {
+    html = html.split(`@@MATH_BLOCK_${i}@@`).join(rendered);
+  });
   return html;
 }
 
@@ -104,7 +147,20 @@ function extractHeadings(markdown) {
 }
 
 function inlineMarkdown(text) {
-  return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Math extracted (and rendered) before escaping, then spliced back in
+  // after - escaping first would mangle LaTeX like "$a < b$" into HTML
+  // entities before KaTeX ever saw the real "<".
+  const mathTokens = [];
+  const withPlaceholders = text.replace(/\$([^$\n]+?)\$/g, (_m, expr) => {
+    const token = `@@MATH_INLINE_${mathTokens.length}@@`;
+    mathTokens.push(renderMath(expr.trim(), false));
+    return token;
+  });
+  let html = escapeHtml(withPlaceholders).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  mathTokens.forEach((rendered, i) => {
+    html = html.split(`@@MATH_INLINE_${i}@@`).join(rendered);
+  });
+  return html;
 }
 
 function escapeHtml(text) {
@@ -155,6 +211,64 @@ function tileClassFor(name) {
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
   return `tile-${(hash % 6) + 1}`;
 }
+
+// --- Find bar (Ctrl+F) - a custom BrowserWindow has no built-in one, so this
+// is a thin UI over Electron's own webContents.findInPage (see main.ts). ---
+const findBar = document.getElementById('find-bar');
+const findInput = document.getElementById('find-input');
+const findCountEl = document.getElementById('find-count');
+
+document.getElementById('find-icon').innerHTML = icon('search', 14);
+document.getElementById('find-prev-btn').innerHTML = icon('chevronLeft', 16);
+document.getElementById('find-next-btn').innerHTML = `<span style="display:inline-block; transform:scaleX(-1)">${icon('chevronLeft', 16)}</span>`;
+document.getElementById('find-close-btn').innerHTML = icon('winClose', 14);
+
+function openFindBar() {
+  findBar.style.display = 'flex';
+  findInput.focus();
+  findInput.select();
+}
+
+function closeFindBar() {
+  findBar.style.display = 'none';
+  findInput.value = '';
+  findCountEl.textContent = '';
+  window.lectureApp.stopFindInPage();
+}
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+    e.preventDefault();
+    openFindBar();
+  } else if (e.key === 'Escape' && findBar.style.display !== 'none') {
+    closeFindBar();
+  }
+});
+
+findInput.addEventListener('input', () => {
+  const text = findInput.value;
+  if (!text) {
+    window.lectureApp.stopFindInPage();
+    findCountEl.textContent = '';
+    return;
+  }
+  window.lectureApp.findInPage(text, true, false);
+});
+findInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !findInput.value) return;
+  window.lectureApp.findInPage(findInput.value, !e.shiftKey, true);
+});
+document.getElementById('find-prev-btn').addEventListener('click', () => {
+  if (findInput.value) window.lectureApp.findInPage(findInput.value, false, true);
+});
+document.getElementById('find-next-btn').addEventListener('click', () => {
+  if (findInput.value) window.lectureApp.findInPage(findInput.value, true, true);
+});
+document.getElementById('find-close-btn').addEventListener('click', closeFindBar);
+
+window.lectureApp.onFoundInPage(({ activeMatchOrdinal, matches }) => {
+  findCountEl.textContent = matches > 0 ? `${activeMatchOrdinal}/${matches}` : '0/0';
+});
 
 // --- Dropdown menu (used by the "..." button on subject/lecture cards) ---
 let openMenuEl = null;
@@ -380,6 +494,7 @@ window.lectureApp.onConnectionStatus((connected, tabTitle) => {
   transcriptBox.innerHTML = '';
   liveAssignments = [];
   renderLiveAssignments();
+  document.getElementById('silence-warning').style.display = 'none';
   // The structured conspect is only built once, when recording stops (see
   // main.ts) - rebuilding it continuously would burn through Gemini's free
   // daily quota well before a full day of lectures is over.
@@ -404,6 +519,37 @@ function renderLiveAssignments() {
 window.lectureApp.onAssignmentDetected((entry) => {
   liveAssignments.push(entry);
   renderLiveAssignments();
+});
+
+// --- Auto-stop-on-silence warning (opt-in, see Settings) - main.ts only
+// ever asks the renderer to stop; the renderer decides how, by reusing the
+// exact same button click a manual stop would use. ---
+document.getElementById('silence-warning-dismiss-btn').addEventListener('click', () => {
+  window.lectureApp.dismissSilenceWarning();
+  document.getElementById('silence-warning').style.display = 'none';
+});
+
+window.lectureApp.onSilenceWarning(({ autoStopInSec }) => {
+  const banner = document.getElementById('silence-warning');
+  const textEl = document.getElementById('silence-warning-text');
+  const dismissBtn = document.getElementById('silence-warning-dismiss-btn');
+
+  if (autoStopInSec <= 0) {
+    textEl.textContent = t('live.silenceAutoStopped');
+    dismissBtn.style.display = 'none';
+    banner.style.display = 'flex';
+    const stopBtn = document.getElementById('stop-mic-btn');
+    if (stopBtn.style.display !== 'none' && !stopBtn.disabled) stopBtn.click();
+    return;
+  }
+
+  dismissBtn.style.display = '';
+  textEl.textContent = t('live.silenceWarning', { minutes: Math.ceil(autoStopInSec / 60) });
+  banner.style.display = 'flex';
+});
+
+window.lectureApp.onSilenceWarningCleared(() => {
+  document.getElementById('silence-warning').style.display = 'none';
 });
 
 // --- In-app microphone recording (offline lecture, no browser needed) ---
@@ -703,6 +849,17 @@ async function openSubjectGrid() {
   libBackBtn.style.display = 'none';
   document.getElementById('lib-chat-btn').style.display = 'none';
 
+  const reviewBtn = document.getElementById('lib-review-btn');
+  const dueSummaries = await window.lectureApp.listDueFlashcards();
+  const totalDue = dueSummaries.reduce((sum, s) => sum + s.dueCount, 0);
+  if (totalDue > 0) {
+    reviewBtn.style.display = 'inline-flex';
+    reviewBtn.innerHTML = `${icon('cards', 14)}<span>${escapeHtml(t('flashcards.reviewButton', { count: totalDue }))}</span>`;
+    reviewBtn.onclick = () => openGlobalFlashcardReview(dueSummaries);
+  } else {
+    reviewBtn.style.display = 'none';
+  }
+
   const subjects = await window.lectureApp.listSubjects();
   const wrapper = document.createElement('div');
 
@@ -766,6 +923,7 @@ async function openSubject(subject) {
   libTitle.textContent = subject;
   libBackBtn.style.display = 'flex';
   libBackBtn.onclick = openSubjectGrid;
+  document.getElementById('lib-review-btn').style.display = 'none';
   const chatBtn = document.getElementById('lib-chat-btn');
   chatBtn.style.display = 'inline-flex';
   chatBtn.innerHTML = `${icon('chat', 14)}<span>${escapeHtml(t('library.chatBySubject'))}</span>`;
@@ -797,6 +955,7 @@ async function openNote(subject, lecture, backTo) {
   libTitle.textContent = lecture.title;
   libBackBtn.style.display = 'flex';
   libBackBtn.onclick = () => (backTo === 'search' ? renderSearchResults() : openSubject(subject));
+  document.getElementById('lib-review-btn').style.display = 'none';
   const chatBtn = document.getElementById('lib-chat-btn');
   chatBtn.style.display = 'inline-flex';
   chatBtn.innerHTML = `${icon('chat', 14)}<span>${escapeHtml(t('library.chatByLecture'))}</span>`;
@@ -849,9 +1008,11 @@ async function openNote(subject, lecture, backTo) {
         ${hasRaw ? `<button class="ghost-btn" id="note-rebuild-btn">${icon('file', 14)}<span>${escapeHtml(t('note.rebuild'))}</span></button>` : ''}
         ${hasRaw ? `<button class="ghost-btn" id="note-original-btn">${icon('mic', 14)}<span>${escapeHtml(t('note.whatRecorded'))}</span></button>` : ''}
         <button class="ghost-btn" id="note-quiz-btn">${icon('help', 14)}<span>${escapeHtml(t('note.quiz'))}</span></button>
+        <button class="ghost-btn" id="note-flashcards-btn">${icon('cards', 14)}<span>${escapeHtml(t('flashcards.button'))}</span></button>
         <button class="ghost-btn" id="note-record-btn">${icon('mic', 14)}<span>${escapeHtml(t('note.recordMore'))}</span></button>
         <button class="ghost-btn" id="note-edit-btn">${icon('pencil', 14)}<span>${escapeHtml(t('note.edit'))}</span></button>
         <button class="ghost-btn" id="note-copy-btn">${icon('copy', 14)}<span>${escapeHtml(t('note.copy'))}</span></button>
+        <button class="ghost-btn" id="note-export-btn">${icon('download', 14)}<span>${escapeHtml(t('note.export'))}</span></button>
         <div class="note-outline" id="note-outline" style="display:none">
           <div class="note-outline-head">${escapeHtml(t('note.outlineHead'))}</div>
           <div class="note-outline-list" id="note-outline-list"></div>
@@ -871,6 +1032,51 @@ async function openNote(subject, lecture, backTo) {
     const listEl = wrapper.querySelector('#note-assignments-list');
     for (const entry of savedAssignments) listEl.appendChild(assignmentRow(entry));
   }
+
+  const exportBtn = wrapper.querySelector('#note-export-btn');
+  exportBtn.addEventListener('click', (e) => {
+    openMenu(e.currentTarget, [
+      { label: t('note.exportPdf'), icon: 'download', onClick: () => runExport('pdf') },
+      { label: t('note.exportDoc'), icon: 'download', onClick: () => runExport('doc') },
+    ]);
+  });
+  async function runExport(format) {
+    const original = exportBtn.innerHTML;
+    exportBtn.disabled = true;
+    try {
+      await window.lectureApp.exportNote(lecture.title, wrapper.querySelector('#note-render').innerHTML, format);
+    } finally {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = original;
+    }
+  }
+
+  const flashcardsBtn = wrapper.querySelector('#note-flashcards-btn');
+  flashcardsBtn.addEventListener('click', async () => {
+    const original = flashcardsBtn.innerHTML;
+    let cards = await window.lectureApp.loadFlashcards(subject, lecture.folderName);
+    if (cards.length === 0) {
+      flashcardsBtn.disabled = true;
+      flashcardsBtn.innerHTML = `${rubyGemSvg(14)}<span>${escapeHtml(t('flashcards.generating'))}</span>`;
+      try {
+        cards = await window.lectureApp.generateFlashcards(subject, lecture.folderName);
+      } catch (err) {
+        showAlert(t('flashcards.generateFailedTitle'), String(err.message || err));
+        return;
+      } finally {
+        flashcardsBtn.disabled = false;
+        flashcardsBtn.innerHTML = original;
+      }
+      if (cards.length === 0) {
+        showAlert(t('flashcards.generateFailedTitle'), t('flashcards.generateEmptyMsg'));
+        return;
+      }
+    }
+    const now = Date.now();
+    const due = cards.filter((c) => new Date(c.dueAt).getTime() <= now);
+    const queue = (due.length > 0 ? due : cards).map((card) => ({ subject, folderName: lecture.folderName, card }));
+    openFlashcardReview(queue);
+  });
 
   const renderEl = wrapper.querySelector('#note-render');
   const editorEl = wrapper.querySelector('#note-editor');
@@ -1057,6 +1263,7 @@ async function renderSearchResults() {
   libTitle.textContent = t('library.searchResults');
   libBackBtn.style.display = 'none';
   document.getElementById('lib-chat-btn').style.display = 'none';
+  document.getElementById('lib-review-btn').style.display = 'none';
 
   const { subjects, lectures } = await window.lectureApp.searchLectures(searchInput.value.trim());
   if (subjects.length === 0 && lectures.length === 0) {
@@ -1420,6 +1627,87 @@ document.getElementById('chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendChatMessage();
 });
 
+// --- Flashcard review (spaced repetition) - one shared overlay for both a
+// single lecture's "Карточки" button and the library-wide "due" review, so
+// the queue is just a flat list of {subject, folderName, card} either way. ---
+let flashcardQueue = [];
+let flashcardIndex = 0;
+
+document.getElementById('flashcard-close-btn').innerHTML = icon('winClose', 16);
+document.getElementById('flashcard-close-btn').addEventListener('click', closeFlashcardReview);
+
+function openFlashcardReview(queue) {
+  flashcardQueue = queue;
+  flashcardIndex = 0;
+  document.getElementById('flashcard-overlay').style.display = 'flex';
+  renderFlashcard();
+}
+
+function closeFlashcardReview() {
+  document.getElementById('flashcard-overlay').style.display = 'none';
+  flashcardQueue = [];
+}
+
+function renderFlashcard() {
+  const progressEl = document.getElementById('flashcard-progress');
+  const contentEl = document.getElementById('flashcard-content');
+  const actionsEl = document.getElementById('flashcard-actions');
+
+  if (flashcardIndex >= flashcardQueue.length) {
+    progressEl.textContent = t('flashcards.done');
+    contentEl.innerHTML = `<p class="hint">${escapeHtml(t('flashcards.doneHint'))}</p>`;
+    actionsEl.innerHTML = '';
+    return;
+  }
+
+  const { card } = flashcardQueue[flashcardIndex];
+  progressEl.textContent = `${flashcardIndex + 1} / ${flashcardQueue.length}`;
+  contentEl.innerHTML = `<div class="flashcard-face">${renderMarkdown(card.front) || escapeHtml(card.front)}</div>`;
+  actionsEl.innerHTML = `<button class="primary-btn" id="flashcard-reveal-btn">${escapeHtml(t('flashcards.reveal'))}</button>`;
+  document.getElementById('flashcard-reveal-btn').addEventListener('click', revealFlashcardBack);
+}
+
+function revealFlashcardBack() {
+  const { card } = flashcardQueue[flashcardIndex];
+  const contentEl = document.getElementById('flashcard-content');
+  const actionsEl = document.getElementById('flashcard-actions');
+  contentEl.innerHTML = `
+    <div class="flashcard-face">${renderMarkdown(card.front) || escapeHtml(card.front)}</div>
+    <div class="flashcard-divider"></div>
+    <div class="flashcard-face flashcard-back">${renderMarkdown(card.back) || escapeHtml(card.back)}</div>
+  `;
+  const ratings = ['again', 'hard', 'good', 'easy'];
+  actionsEl.innerHTML = ratings
+    .map((r) => `<button class="ghost-btn flashcard-rate-btn" data-rating="${r}">${escapeHtml(t(`flashcards.${r}`))}</button>`)
+    .join('');
+  actionsEl.querySelectorAll('.flashcard-rate-btn').forEach((btn) => {
+    btn.addEventListener('click', () => rateFlashcard(btn.dataset.rating));
+  });
+}
+
+async function rateFlashcard(rating) {
+  const entry = flashcardQueue[flashcardIndex];
+  await window.lectureApp.reviewFlashcard(entry.subject, entry.folderName, entry.card.id, rating);
+  // "Again" goes back into the queue instead of just moving on, so it comes
+  // up again before the session ends - same as Anki's own "again" behavior.
+  if (rating === 'again') flashcardQueue.push(entry);
+  flashcardIndex++;
+  renderFlashcard();
+}
+
+/** Pools every lecture's due cards into one queue - the "Повторение" entry point on the library grid, for reviewing across the whole library instead of one lecture at a time. */
+async function openGlobalFlashcardReview(dueSummaries) {
+  const now = Date.now();
+  const queue = [];
+  for (const s of dueSummaries) {
+    const cards = await window.lectureApp.loadFlashcards(s.subject, s.folderName);
+    for (const card of cards.filter((c) => new Date(c.dueAt).getTime() <= now)) {
+      queue.push({ subject: s.subject, folderName: s.folderName, card });
+    }
+  }
+  openFlashcardReview(queue);
+}
+
 // --- Settings tab ---
 const settingsForm = document.getElementById('settings-form');
 const settingsSaved = document.getElementById('settings-saved');
@@ -1488,7 +1776,9 @@ async function loadSettingsIntoForm() {
   const settings = await window.lectureApp.getSettings();
   for (const [key, value] of Object.entries(settings)) {
     const field = settingsForm.elements.namedItem(key);
-    if (field) field.value = value;
+    if (!field) continue;
+    if (field.type === 'checkbox') field.checked = Boolean(value);
+    else field.value = value;
   }
   libraryPathInput.value = settings.libraryPath;
 }
@@ -1503,6 +1793,7 @@ settingsForm.addEventListener('submit', async (e) => {
     toggleHotkey: formData.get('toggleHotkey'),
     callOutName: formData.get('callOutName').trim(),
     markerPhrase: formData.get('markerPhrase').trim(),
+    autoStopSilenceEnabled: formData.get('autoStopSilenceEnabled') === 'on',
   };
   await window.lectureApp.saveSettings(settings);
   settingsSaved.textContent = t('settings.savedHint');

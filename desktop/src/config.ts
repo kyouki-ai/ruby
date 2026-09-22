@@ -30,6 +30,11 @@ export interface AppSettings {
   // это") to flag the current moment as important - picked up in the live
   // transcript and called out in the final conspect. Empty disables it.
   markerPhrase: string;
+  // Auto-stops the recording after a long continuous silence (the lecture
+  // ended and nobody remembered to hit Stop). Off by default, and even when
+  // on it warns well before actually stopping (see main.ts's SILENCE_WARN_MS
+  // / SILENCE_AUTOSTOP_MS) so an ordinary break between pairs never trips it.
+  autoStopSilenceEnabled: boolean;
 }
 
 function defaultSettings(): AppSettings {
@@ -40,6 +45,7 @@ function defaultSettings(): AppSettings {
     lastSubject: DEFAULT_SUBJECT,
     callOutName: '',
     markerPhrase: '',
+    autoStopSilenceEnabled: false,
   };
 }
 

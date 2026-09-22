@@ -22,6 +22,8 @@ const ICONS = {
   chat: '<path d="M3 4.5h12v8H8.5L5 15.5v-3H3z"/>',
   star: '<path d="M9 2.3l1.9 3.9 4.3.6-3.1 3 .7 4.3L9 12.1l-3.8 2 .7-4.3-3.1-3 4.3-.6Z"/>',
   list: '<path d="M3.5 5h11M3.5 9h11M3.5 13h11"/>',
+  cards: '<rect x="3.2" y="6" width="9" height="7.5" rx="1.2" transform="rotate(-8 7.7 9.75)"/><rect x="5.5" y="4.2" width="9" height="7.5" rx="1.2"/>',
+  download: '<path d="M9 2.5v8M5.3 7.3 9 11l3.7-3.7M3.5 13.5h11"/>',
 };
 
 function icon(name, size = 18) {

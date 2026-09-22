@@ -88,3 +88,26 @@ export const IPC_LOAD_CHAT_THREAD = 'load-chat-thread';
 export const IPC_RENAME_CHAT_THREAD = 'rename-chat-thread';
 export const IPC_DELETE_CHAT_THREAD = 'delete-chat-thread';
 export const IPC_FIND_OR_CREATE_LECTURE_THREAD = 'find-or-create-lecture-thread';
+
+// Auto-stop-on-silence: pushed while recording if silence has gone on long
+// enough to warn, cleared once sound resumes or the user dismisses it.
+export const IPC_SILENCE_WARNING = 'silence-warning';
+export const IPC_SILENCE_WARNING_CLEARED = 'silence-warning-cleared';
+export const IPC_DISMISS_SILENCE_WARNING = 'dismiss-silence-warning';
+
+// Flashcards with spaced repetition, generated from a lecture's notes (see
+// storage/flashcardStore.ts).
+export const IPC_GENERATE_FLASHCARDS = 'generate-flashcards';
+export const IPC_LOAD_FLASHCARDS = 'load-flashcards';
+export const IPC_REVIEW_FLASHCARD = 'review-flashcard';
+export const IPC_LIST_DUE_FLASHCARDS = 'list-due-flashcards';
+
+// Exporting a rendered note to a file (PDF, or a Word-openable .doc).
+export const IPC_EXPORT_NOTE = 'export-note';
+
+// In-page search (Ctrl+F) - thin wrapper around Electron's own
+// webContents.findInPage, since there's no built-in find bar for a custom
+// BrowserWindow the way there is in a real browser tab.
+export const IPC_FIND_IN_PAGE = 'find-in-page';
+export const IPC_STOP_FIND_IN_PAGE = 'stop-find-in-page';
+export const IPC_FOUND_IN_PAGE = 'found-in-page';

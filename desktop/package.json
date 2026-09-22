@@ -1,6 +1,6 @@
 {
   "name": "ai-lecture-notes-desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Offline AI lecture notetaker - Electron tray app",
   "private": true,
   "main": "dist/main.js",
@@ -35,7 +35,10 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": "../extension", "to": "extension" }
+      {
+        "from": "../extension",
+        "to": "extension"
+      }
     ],
     "win": {
       "target": "nsis",

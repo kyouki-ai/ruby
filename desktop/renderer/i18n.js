@@ -18,6 +18,8 @@ const TRANSLATIONS = {
     'nav.chat': 'Чат',
     'nav.library': 'Мои предметы',
 
+    'find.placeholder': 'Найти...',
+
     'status.disconnected': 'Не подключено',
     'status.needsApiKey': 'Нужен API-ключ',
 
@@ -102,6 +104,9 @@ const TRANSLATIONS = {
     'live.startMic': 'Начать запись с микрофона',
     'live.micError': 'Доступ к микрофону не получен — разреши доступ и попробуй снова.',
     'live.extensionDisconnected': 'Расширение отключилось. Подожди пару секунд и попробуй снова.',
+    'live.silenceWarning': 'Тишина уже давно — если это перерыв, продолжай как обычно. Иначе запись остановится сама через ~{minutes} мин.',
+    'live.silenceAutoStopped': 'Запись остановлена автоматически — долгая тишина.',
+    'live.silenceDismiss': 'Это перерыв, не останавливай',
 
     'assignments.detectedHead': 'Обнаруженные задания',
     'assignments.copy': 'Копировать',
@@ -134,6 +139,9 @@ const TRANSLATIONS = {
     'settings.marker.hint': 'Скажи эту фразу вслух во время записи — момент попадёт в живой транскрипт с пометкой и будет отдельно выделен в итоговом конспекте. Оставь пустым, чтобы отключить.',
     'settings.marker.label': 'Кодовая фраза',
     'settings.marker.placeholder': 'Например: отметь это',
+    'settings.autoStop.legend': 'Автостоп при долгой тишине',
+    'settings.autoStop.hint': 'Если 20 минут подряд не слышно ни звука, придёт предупреждение, а ещё через 5 минут тишины запись остановится сама. Обычный перерыв между парами это не затронет — таймер сбрасывается любым звуком, а до автостопа есть время отменить вручную. Выключено по умолчанию.',
+    'settings.autoStop.label': 'Останавливать запись автоматически',
     'settings.saved': 'Сохранено',
     'settings.savedHint': 'Сохранено. Хоткей применится после перезапуска приложения.',
     'settings.apiKeyConfigured': 'Ключ сохранён и готов к работе.',
@@ -171,6 +179,22 @@ const TRANSLATIONS = {
     'note.rebuildFailedOverload': 'Gemini сейчас перегружен — это временно. Попробуй пересобрать ещё раз через минуту.',
     'note.rebuildFailedRateLimit': 'Groq на секунду ограничил скорость (лимит токенов в минуту) — это временно, попробуй пересобрать ещё раз через полминуты.',
     'note.rebuildFailedGeneric': 'Не удалось собрать конспект: {error}',
+    'note.export': 'Экспорт',
+    'note.exportPdf': 'В PDF',
+    'note.exportDoc': 'В Word',
+
+    'flashcards.button': 'Карточки',
+    'flashcards.generating': 'Готовлю карточки…',
+    'flashcards.generateFailedTitle': 'Не удалось создать карточки',
+    'flashcards.generateEmptyMsg': 'ИИ не вернул ни одной карточки - попробуй ещё раз.',
+    'flashcards.reveal': 'Показать ответ',
+    'flashcards.again': 'Снова',
+    'flashcards.hard': 'Трудно',
+    'flashcards.good': 'Хорошо',
+    'flashcards.easy': 'Легко',
+    'flashcards.done': 'Готово',
+    'flashcards.doneHint': 'На сегодня всё - карточки вернутся, когда придёт их время.',
+    'flashcards.reviewButton': 'Повторение ({count})',
   },
   en: {
     'common.save': 'Save',
@@ -184,6 +208,8 @@ const TRANSLATIONS = {
 
     'nav.chat': 'Chat',
     'nav.library': 'My subjects',
+
+    'find.placeholder': 'Find...',
 
     'status.disconnected': 'Not connected',
     'status.needsApiKey': 'API key needed',
@@ -269,6 +295,9 @@ const TRANSLATIONS = {
     'live.startMic': 'Start recording from microphone',
     'live.micError': 'Microphone access was not granted — allow access and try again.',
     'live.extensionDisconnected': 'The extension disconnected. Wait a couple of seconds and try again.',
+    'live.silenceWarning': "It's been quiet for a while - if this is a break, just keep going as usual. Otherwise the recording will stop itself in ~{minutes} min.",
+    'live.silenceAutoStopped': 'Recording stopped automatically - a long silence.',
+    'live.silenceDismiss': "It's a break, don't stop",
 
     'assignments.detectedHead': 'Detected assignments',
     'assignments.copy': 'Copy',
@@ -301,6 +330,9 @@ const TRANSLATIONS = {
     'settings.marker.hint': "Say this phrase out loud while recording — that moment gets flagged in the live transcript and highlighted separately in the final notes. Leave empty to disable.",
     'settings.marker.label': 'Code phrase',
     'settings.marker.placeholder': 'E.g.: flag this',
+    'settings.autoStop.legend': 'Auto-stop on long silence',
+    'settings.autoStop.hint': "If nothing is heard for 20 minutes straight, you'll get a warning, and after 5 more minutes of silence the recording stops itself. An ordinary break between classes won't trip this — any sound resets the timer, and there's time to cancel manually before it stops. Off by default.",
+    'settings.autoStop.label': 'Stop recording automatically',
     'settings.saved': 'Saved',
     'settings.savedHint': 'Saved. The hotkey takes effect after restarting the app.',
     'settings.apiKeyConfigured': 'Key saved and ready to use.',
@@ -338,6 +370,22 @@ const TRANSLATIONS = {
     'note.rebuildFailedOverload': 'Gemini is overloaded right now — this is temporary. Try rebuilding again in a minute.',
     'note.rebuildFailedRateLimit': "Groq briefly rate-limited (tokens-per-minute limit) — this is temporary, try rebuilding again in half a minute.",
     'note.rebuildFailedGeneric': 'Could not build the notes: {error}',
+    'note.export': 'Export',
+    'note.exportPdf': 'To PDF',
+    'note.exportDoc': 'To Word',
+
+    'flashcards.button': 'Flashcards',
+    'flashcards.generating': 'Preparing flashcards…',
+    'flashcards.generateFailedTitle': 'Could not create flashcards',
+    'flashcards.generateEmptyMsg': "The AI didn't return any cards - try again.",
+    'flashcards.reveal': 'Show answer',
+    'flashcards.again': 'Again',
+    'flashcards.hard': 'Hard',
+    'flashcards.good': 'Good',
+    'flashcards.easy': 'Easy',
+    'flashcards.done': 'Done',
+    'flashcards.doneHint': "That's it for now - cards will come back once they're due again.",
+    'flashcards.reviewButton': 'Review ({count})',
   },
 };
 

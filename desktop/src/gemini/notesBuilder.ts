@@ -97,6 +97,7 @@ ${styleInstructions}
 - Include a "[mm:ss]" timestamp next to each bullet/section pointing to where it was discussed.
 - If slide content and speech overlap, merge them instead of duplicating.
 - Write the notes in the same language the transcript is in - do not translate to English or any other language.
+- Write any mathematical/physical/financial formulas as LaTeX: "$...$" for an inline expression, "$$...$$" on its own for a standalone/display formula. Don't approximate formulas as plain text or ASCII art when the transcript or slides contain real notation.
 ${markedMoments.length > 0 ? '- The student flagged some moments as important while recording (list below) - make sure each one is reflected in the notes, marked with "⭐" at the start of that bullet/section.' : ''}
 
 TRANSCRIPT:
@@ -125,10 +126,51 @@ const QUIZ_PROMPT_PREFIX =
   'Ты помогаешь студенту подготовиться к зачёту по его собственному конспекту лекции. ' +
   'На основе конспекта ниже составь короткую самопроверку: 4-6 вопросов (можно смешивать открытые ' +
   'вопросы и вопросы с вариантами ответов). Не пиши ответы сразу под вопросами - вынеси все ответы ' +
-  'отдельным списком в самом конце, под заголовком "## Ответы". Пиши по-русски, в markdown, без преамбулы.\n\n' +
+  'отдельным списком в самом конце, под заголовком "## Ответы". Формулы пиши в LaTeX ($...$ или $$...$$). ' +
+  'Пиши по-русски, в markdown, без преамбулы.\n\n' +
   'КОНСПЕКТ:\n';
 
 /** A short self-check quiz generated from a saved lecture's notes - available any time after saving, not just once. */
 export function generateQuizFromNotes(markdown: string): Promise<string> {
   return generateTextRouted(QUIZ_PROMPT_PREFIX + (markdown.trim() || '(конспект пуст)'));
+}
+
+const FLASHCARD_PROMPT_PREFIX =
+  'На основе конспекта лекции ниже составь набор карточек для запоминания (вопрос-ответ), от 8 до 15 штук ' +
+  'в зависимости от объёма материала - по одному ключевому факту, определению или понятию на карточку, ' +
+  'коротко и конкретно, без длинных объяснений на обратной стороне. Пиши на том же языке, что и конспект. ' +
+  'Формулы пиши в LaTeX ($...$ или $$...$$), не забывая правильно экранировать обратные слэши внутри JSON-строк. ' +
+  'Ответь СТРОГО валидным JSON-массивом объектов вида {"front": "...", "back": "..."} и больше ничего - ' +
+  'ни преамбулы, ни markdown-разметки, ни обратных кавычек.\n\nКОНСПЕКТ:\n';
+
+export interface FlashcardPair {
+  front: string;
+  back: string;
+}
+
+/** Models sometimes wrap the JSON in a ```json fence or add a stray sentence despite instructions not to - this survives both. */
+function parseFlashcardPairs(raw: string): FlashcardPair[] {
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/, '')
+    .trim();
+  const match = cleaned.match(/\[[\s\S]*\]/);
+  const jsonText = match ? match[0] : cleaned;
+  try {
+    const parsed = JSON.parse(jsonText);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((p): p is FlashcardPair => Boolean(p) && typeof p.front === 'string' && typeof p.back === 'string')
+      .map((p) => ({ front: p.front.trim(), back: p.back.trim() }))
+      .filter((p) => p.front && p.back);
+  } catch {
+    return [];
+  }
+}
+
+/** Generates front/back flashcard pairs from a saved lecture's notes - the caller (main.ts) turns these into scheduled Flashcard records. */
+export async function generateFlashcardPairsFromNotes(markdown: string): Promise<FlashcardPair[]> {
+  const raw = await generateTextRouted(FLASHCARD_PROMPT_PREFIX + (markdown.trim() || '(конспект пуст)'));
+  return parseFlashcardPairs(raw);
 }
