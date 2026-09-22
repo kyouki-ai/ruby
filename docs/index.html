@@ -6,74 +6,103 @@
 <title>Ruby — конспект лекций, который пишется сам</title>
 <meta name="description" content="Ruby записывает звук лекции — с микрофона или прямо в браузере — и превращает его в аккуратный markdown-конспект с помощью Gemini. Бесплатно, на твоём собственном ключе.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,380;0,9..144,560;0,9..144,680;1,9..144,560&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root { --ink: #ece4de; --ink-dim: #b9a9a3; --paper: #150d0e; --paper-dark: #1f1214; --card: #1c1213; --red: #c23350; --red-deep: #7a1f30; --rule: rgba(194,51,80,.22); }
+  :root {
+    --ink: #f4ece5; --ink-soft: #dcccc4; --ink-dim: #a8938c;
+    --paper: #130c0d; --paper-deep: #0b0607; --paper-dark: #1d1315; --card: #221517; --card-hi: #2a1a1c;
+    --red: #dd3f65; --red-bright: #f0577c; --red-deep: #7d1f32; --gold: #e7b768;
+    --rule: rgba(221,63,101,.24); --serif: 'Fraunces', Georgia, 'Iowan Old Style', serif; --mono: 'JetBrains Mono', 'Cascadia Code', 'Courier New', monospace;
+    --radius: 10px;
+  }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  body { margin: 0; background: var(--paper); color: var(--ink); font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; }
-  h1, h2, h3 { font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; margin: 0; }
+  body {
+    margin: 0; color: var(--ink); font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background:
+      radial-gradient(1100px 720px at 12% -8%, rgba(221,63,101,.14), transparent 60%),
+      radial-gradient(900px 620px at 104% 4%, rgba(231,183,104,.08), transparent 55%),
+      var(--paper);
+    position: relative;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 500; pointer-events: none; opacity: .05; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  h1, h2, h3 { font-family: var(--serif); margin: 0; }
   p { margin: 0; }
   a { color: inherit; }
-  .mono { font-family: 'Cascadia Code', 'Courier New', monospace; }
-  ::selection { background: rgba(179,39,62,.28); }
+  .mono { font-family: var(--mono); }
+  ::selection { background: rgba(221,63,101,.32); }
 
   .ruled {
     background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px);
   }
   .margin-rule { position: relative; }
   .margin-rule::before {
-    content: ''; position: absolute; top: 0; bottom: 0; left: 64px; width: 1.5px; background: rgba(179,39,62,.45);
+    content: ''; position: absolute; top: 0; bottom: 0; left: 64px; width: 1.5px;
+    background: linear-gradient(to bottom, transparent, rgba(221,63,101,.5) 8%, rgba(221,63,101,.5) 92%, transparent);
   }
 
-  .reveal { opacity: 0; transform: translateY(20px) rotate(var(--r, 0deg)); transition: opacity .6s ease, transform .6s ease; }
+  .reveal { opacity: 0; transform: translateY(22px) rotate(var(--r, 0deg)); transition: opacity .7s cubic-bezier(.16,.8,.3,1), transform .7s cubic-bezier(.16,.8,.3,1); }
   .reveal.visible { opacity: 1; transform: translateY(0) rotate(var(--r, 0deg)); }
 
   .tab {
-    font-family: 'Cascadia Code', 'Courier New', monospace;
-    font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--ink); text-decoration: none; padding: 10px 16px 8px;
+    font-family: var(--mono);
+    font-size: 12px; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--ink-soft); text-decoration: none; padding: 10px 16px 8px;
     background: var(--paper-dark);
     clip-path: polygon(8% 0, 92% 0, 100% 100%, 0% 100%);
-    border-bottom: 2px solid transparent;
-    transition: background .2s ease, color .2s ease;
+    transition: background .2s ease, color .2s ease, transform .2s ease;
   }
-  .tab:hover { background: var(--red); color: #fff; }
-  .tab-cta { background: var(--red); color: #fff; }
-  .tab-cta:hover { background: #8f1f33; }
+  .tab:hover { background: var(--red); color: #fff; transform: translateY(-1px); }
+  .tab-cta { background: var(--red); color: #fff; box-shadow: 0 4px 14px -4px rgba(221,63,101,.55); }
+  .tab-cta:hover { background: var(--red-bright); }
 
   .stamp-btn {
     display: inline-flex; align-items: center; gap: 10px;
-    font-family: 'Cascadia Code', 'Courier New', monospace; text-transform: uppercase; letter-spacing: .08em;
-    font-size: 13px; font-weight: 700; color: var(--red); background: transparent;
+    font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em;
+    font-size: 13px; font-weight: 700; color: var(--red-bright); background: rgba(221,63,101,.06);
     border: 2.5px solid var(--red); border-radius: 46% 54% 58% 42% / 48% 42% 58% 52%;
-    padding: 15px 26px; transform: rotate(-2deg); transition: transform .2s ease, background .2s ease, color .2s ease;
+    padding: 15px 26px; transform: rotate(-2deg);
+    box-shadow: 0 10px 26px -12px rgba(221,63,101,.55);
+    transition: transform .25s cubic-bezier(.16,.8,.3,1), background .2s ease, color .2s ease, box-shadow .25s ease;
   }
-  .stamp-btn:hover { transform: rotate(-2deg) scale(1.04); background: var(--red); color: #fff; }
+  .stamp-btn:hover { transform: rotate(-1deg) scale(1.045) translateY(-2px); background: var(--red); color: #fff; box-shadow: 0 16px 32px -12px rgba(221,63,101,.7); }
 
   .index-card {
-    background: var(--card); border: 1px solid rgba(194,51,80,.28); border-radius: 3px;
-    box-shadow: 0 8px 18px -8px rgba(30,25,10,.35);
-    padding: 20px 20px 22px; position: relative;
+    background: linear-gradient(165deg, var(--card-hi), var(--card)); border: 1px solid rgba(221,63,101,.25); border-radius: var(--radius);
+    box-shadow: 0 14px 28px -16px rgba(0,0,0,.6);
+    padding: 22px 22px 24px; position: relative;
+    transition: transform .3s cubic-bezier(.16,.8,.3,1), box-shadow .3s ease, border-color .3s ease;
+  }
+  .index-card:hover {
+    transform: rotate(0deg) translateY(-4px) !important;
+    box-shadow: 0 22px 40px -18px rgba(221,63,101,.35);
+    border-color: rgba(221,63,101,.5);
   }
   .index-card::before {
     content: ''; position: absolute; top: -6px; left: 22px; width: 12px; height: 12px; border-radius: 50%;
-    background: var(--red); box-shadow: 0 2px 3px rgba(0,0,0,.35);
+    background: radial-gradient(circle at 35% 30%, var(--red-bright), var(--red-deep)); box-shadow: 0 2px 4px rgba(0,0,0,.45);
   }
 
-  .card-num { font-family: Georgia, serif; font-size: 26px; color: var(--red); opacity: .55; margin-bottom: 10px; }
+  .card-num { font-family: var(--serif); font-size: 27px; color: var(--red); opacity: .6; margin-bottom: 10px; font-weight: 560; }
 
   .tape {
-    position: absolute; width: 70px; height: 26px; background: rgba(241,235,218,.55);
-    border: 1px solid rgba(0,0,0,.06); box-shadow: 0 1px 3px rgba(0,0,0,.15);
+    position: absolute; width: 70px; height: 26px; background: rgba(241,235,218,.5);
+    border: 1px solid rgba(0,0,0,.06); box-shadow: 0 2px 5px rgba(0,0,0,.25); backdrop-filter: blur(1px);
   }
 
   .sticky-note {
-    background: #4a1620; padding: 26px 26px 30px; box-shadow: 3px 6px 14px -6px rgba(30,25,10,.4);
-    position: relative; transform: rotate(-1.4deg);
+    background: linear-gradient(160deg, #55182a, #3c1120); padding: 28px 28px 32px;
+    box-shadow: 6px 14px 30px -12px rgba(0,0,0,.55), 0 0 0 1px rgba(221,63,101,.15) inset;
+    position: relative; transform: rotate(-1.4deg); border-radius: 2px;
   }
   .sticky-note::after {
     content: ''; position: absolute; bottom: 0; right: 0; width: 0; height: 0;
-    border-style: solid; border-width: 0 0 18px 18px; border-color: transparent transparent rgba(0,0,0,.12) transparent;
+    border-style: solid; border-width: 0 0 20px 20px; border-color: transparent transparent rgba(0,0,0,.22) transparent;
   }
 
   .tear {
@@ -85,8 +114,8 @@
     background-color: var(--paper-dark);
   }
 
-  .lib-card { border: 2px solid var(--ink); background: var(--card); padding: 40px; position: relative; }
-  .lib-line { border-bottom: 1.4px dashed rgba(194,51,80,.35); }
+  .lib-card { border: 2px solid var(--ink); background: linear-gradient(165deg, var(--card-hi), var(--card)); padding: 40px; position: relative; border-radius: 4px; }
+  .lib-line { border-bottom: 1.4px dashed rgba(221,63,101,.35); }
 
   .mobile-nav-toggle { display: none; }
   .mobile-menu { display: none; }
@@ -107,16 +136,16 @@
 <div style="width: 100%; overflow-x: hidden;">
 
   <!-- NAV: binder tabs -->
-  <div style="position: sticky; top: 0; z-index: 40; background: var(--paper); border-bottom: 1.5px solid var(--ink);">
+  <div style="position: sticky; top: 0; z-index: 40; background: rgba(19,12,13,.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1.5px solid rgba(244,236,229,.16);">
     <div class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 14px 24px 0; display: flex; align-items: flex-end; gap: 22px;">
-      <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 12px;">
-        <svg width="20" height="20" viewBox="0 0 18 18" style="flex-shrink: 0;">
+      <a href="index.html" style="display: flex; align-items: center; gap: 8px; padding-bottom: 12px; text-decoration: none; color: inherit;">
+        <svg width="21" height="21" viewBox="0 0 18 18" style="flex-shrink: 0;">
           <path d="M9 1.5 14.5 6 9 16.5 3.5 6Z" fill="var(--red)"/>
           <path d="M9 1.5 14.5 6 9 6Z" fill="rgba(255,255,255,0.35)"/>
           <path d="M3.5 6 9 6 9 16.5Z" fill="rgba(0,0,0,0.15)"/>
         </svg>
-        <span style="font-family: Georgia, serif; font-size: 18px; font-weight: 700;">Ruby</span>
-      </div>
+        <span style="font-family: var(--serif); font-size: 19px; font-weight: 680;">Ruby</span>
+      </a>
       <div style="flex-grow: 1;"></div>
       <div class="desktop-nav" style="display: flex; align-items: flex-end; gap: 6px;">
         <a class="tab" href="#features">Возможности</a>
@@ -129,150 +158,161 @@
         <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 5h13M2.5 9h13M2.5 13h13"/></svg>
       </button>
     </div>
-    <div class="mobile-menu" id="mobile-menu" style="border-top: 1px solid var(--rule); padding: 14px 24px 18px; flex-direction: column; gap: 12px; font-family: 'Cascadia Code', monospace; font-size: 13px; text-transform: uppercase;">
+    <div class="mobile-menu" id="mobile-menu" style="border-top: 1px solid var(--rule); padding: 14px 24px 18px; flex-direction: column; gap: 12px; font-family: var(--mono); font-size: 13px; text-transform: uppercase;">
       <a href="#features">Возможности</a>
       <a href="#how">Как это работает</a>
       <a href="#privacy">Приватность</a>
       <a href="help.html">Помощь</a>
-      <a href="download.html" style="color: var(--red); font-weight: 700;">Скачать</a>
+      <a href="download.html" style="color: var(--red-bright); font-weight: 700;">Скачать</a>
     </div>
   </div>
 
   <!-- HERO: notebook page 1 -->
-  <div class="section-pad margin-rule" style="max-width: 1080px; margin: 0 auto; padding: 56px 24px 40px 90px; position: relative;">
-    <div class="mono" style="position: absolute; top: 56px; right: 24px; font-size: 11px; color: #9c8b86; letter-spacing: .05em;">КОНСПЕКТ №1</div>
+  <div class="section-pad margin-rule" style="max-width: 1080px; margin: 0 auto; padding: 64px 24px 40px 90px; position: relative;">
+    <div class="mono" style="position: absolute; top: 64px; right: 24px; font-size: 11px; color: var(--ink-dim); letter-spacing: .05em;">КОНСПЕКТ №1</div>
 
-    <div class="mono" style="font-size: 12px; color: var(--red); letter-spacing: .08em; margin-bottom: 16px;">Тема: для лекций, конспект которых пишется сам</div>
+    <div class="mono reveal" style="font-size: 12px; color: var(--red-bright); letter-spacing: .08em; margin-bottom: 18px; display: flex; align-items: center; gap: 8px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--red-bright); box-shadow: 0 0 10px var(--red-bright); flex-shrink: 0;"></span>
+      Тема: для лекций, конспект которых пишется сам
+    </div>
 
-    <h1 class="hero-title" style="font-size: 50px; line-height: 1.14; letter-spacing: -.3px; max-width: 680px;">
+    <h1 class="hero-title reveal" style="font-size: 56px; font-weight: 680; line-height: 1.1; letter-spacing: -.5px; max-width: 700px;">
       Слушай лекцию.<br>
-      <span style="position: relative; display: inline-block;">
+      <span style="position: relative; display: inline-block; background: linear-gradient(100deg, var(--red-bright), var(--gold) 130%); -webkit-background-clip: text; background-clip: text; color: transparent;">
         Конспект соберётся сам.
-        <svg style="position: absolute; left: 0; bottom: -8px; width: 100%; height: 10px;" viewBox="0 0 320 10" preserveAspectRatio="none">
+        <svg style="position: absolute; left: 0; bottom: -10px; width: 100%; height: 12px;" viewBox="0 0 320 10" preserveAspectRatio="none">
           <path d="M2 6 Q 40 1, 80 6 T 160 6 T 240 6 T 318 6" fill="none" stroke="var(--red)" stroke-width="3" stroke-linecap="round"/>
         </svg>
       </span>
     </h1>
 
-    <p style="margin-top: 26px; font-size: 16.5px; line-height: 1.7; color: #cfc3bd; max-width: 540px;">
+    <p class="reveal" style="margin-top: 28px; font-size: 17px; line-height: 1.72; color: var(--ink-soft); max-width: 540px;">
       Ruby записывает звук лекции — с микрофона или прямо в браузере — и превращает его в аккуратный
       markdown-конспект: заголовки, буллеты, таймкоды. Бесплатно, на твоём собственном Gemini-ключе.
     </p>
 
-    <div style="margin-top: 30px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
-      <a href="#how" class="mono" style="font-size: 13px; text-decoration: underline; text-underline-offset: 3px; color: #cfc3bd;">как это работает →</a>
-      <a href="#privacy" class="mono" style="font-size: 13px; text-decoration: underline; text-underline-offset: 3px; color: #cfc3bd;">о приватности →</a>
+    <div class="reveal" style="margin-top: 32px; display: flex; align-items: center; gap: 28px; flex-wrap: wrap;">
+      <a href="download.html" class="stamp-btn" style="font-size: 12.5px; padding: 13px 22px;">
+        <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5v9M5.2 8.2 9 12l3.8-3.8M3.5 14.5h11"/></svg>
+        Скачать бесплатно
+      </a>
+      <a href="#how" class="mono" style="font-size: 13px; text-decoration: underline; text-underline-offset: 3px; color: var(--ink-soft);">как это работает →</a>
+      <a href="#privacy" class="mono" style="font-size: 13px; text-decoration: underline; text-underline-offset: 3px; color: var(--ink-soft);">о приватности →</a>
     </div>
-    <p class="mono" style="margin-top: 18px; font-size: 11px; color: #9c8b86;">WINDOWS 10/11 · БЕСПЛАТНО · СВОЙ GEMINI API-КЛЮЧ</p>
+    <p class="mono reveal" style="margin-top: 22px; font-size: 11px; color: var(--ink-dim); letter-spacing: .04em;">WINDOWS 10/11 · БЕСПЛАТНО · СВОЙ GEMINI API-КЛЮЧ</p>
 
     <!-- Taped-in screenshot -->
-    <div class="reveal" style="--r: -1.6deg; margin-top: 56px; max-width: 760px; transform: rotate(-1.6deg); position: relative;">
+    <div class="reveal" style="--r: -1.6deg; margin-top: 60px; max-width: 760px; transform: rotate(-1.6deg); position: relative;">
+      <div style="position: absolute; inset: -30px; background: radial-gradient(60% 60% at 50% 40%, rgba(221,63,101,.28), transparent 70%); filter: blur(20px); z-index: -1;"></div>
       <div class="tape" style="top: -12px; left: 30px; transform: rotate(-8deg);"></div>
       <div class="tape" style="top: -12px; right: 40px; transform: rotate(6deg);"></div>
-      <div style="border: 1px solid var(--ink); background: var(--card); padding: 6px; box-shadow: 4px 10px 20px -8px rgba(30,25,10,.4);">
-        <div style="border: 1px solid rgba(194,51,80,.25);">
-          <div style="display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid rgba(194,51,80,.25); background: var(--paper-dark);">
-            <span style="width: 8px; height: 8px; border-radius: 50%; background: #6e3d47;"></span>
-            <span style="width: 8px; height: 8px; border-radius: 50%; background: #6e3d47;"></span>
-            <span style="width: 8px; height: 8px; border-radius: 50%; background: #6e3d47;"></span>
-            <div style="flex-grow: 1; text-align: center; font-family: 'Cascadia Code', monospace; font-size: 11px; color: #9c8b86;">ruby — запись лекции</div>
+      <div style="border: 1px solid rgba(244,236,229,.22); background: var(--card); border-radius: 10px; padding: 6px; box-shadow: 6px 18px 40px -14px rgba(0,0,0,.65);">
+        <div style="border: 1px solid rgba(221,63,101,.25); border-radius: 6px; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid rgba(221,63,101,.25); background: var(--paper-dark);">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #e0616f;"></span>
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #e0b361;"></span>
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #6fb389;"></span>
+            <div style="flex-grow: 1; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--ink-dim);">ruby — запись лекции</div>
           </div>
-          <div class="mock-panels" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(194,51,80,.25);">
-            <div style="background: var(--card); padding: 20px;">
-              <div class="mono" style="font-size: 11px; color: #9c8b86; margin-bottom: 14px; text-transform: uppercase;">Живой транскрипт</div>
-              <div style="height: 8px; width: 90%; background: #3a2226; margin-bottom: 9px;"></div>
-              <div style="height: 8px; width: 74%; background: #3a2226; margin-bottom: 9px;"></div>
-              <div style="height: 8px; width: 82%; background: #3a2226;"></div>
+          <div class="mock-panels" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(221,63,101,.2);">
+            <div style="background: var(--card); padding: 22px;">
+              <div class="mono" style="font-size: 11px; color: var(--ink-dim); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .06em;">Живой транскрипт</div>
+              <div style="height: 8px; width: 90%; border-radius: 3px; background: rgba(244,236,229,.1); margin-bottom: 10px;"></div>
+              <div style="height: 8px; width: 74%; border-radius: 3px; background: rgba(244,236,229,.1); margin-bottom: 10px;"></div>
+              <div style="height: 8px; width: 82%; border-radius: 3px; background: rgba(244,236,229,.1); margin-bottom: 10px;"></div>
+              <div style="height: 8px; width: 60%; border-radius: 3px; background: rgba(244,236,229,.1);"></div>
             </div>
-            <div style="background: var(--card); padding: 20px;">
-              <div class="mono" style="font-size: 11px; color: #9c8b86; margin-bottom: 14px; text-transform: uppercase;">Конспект</div>
-              <div style="font-family: Georgia, serif; font-size: 13px; font-weight: 700; margin-bottom: 8px;">Введение в тему</div>
-              <div style="height: 7px; width: 85%; background: #3a2226; margin-bottom: 12px;"></div>
-              <div style="font-family: Georgia, serif; font-size: 13px; font-weight: 700; margin-bottom: 8px;">Ключевые понятия</div>
-              <div style="height: 7px; width: 70%; background: #3a2226;"></div>
+            <div style="background: var(--card); padding: 22px;">
+              <div class="mono" style="font-size: 11px; color: var(--ink-dim); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .06em;">Конспект</div>
+              <div style="font-family: var(--serif); font-size: 13.5px; font-weight: 680; margin-bottom: 9px; color: var(--red-bright);">Введение в тему</div>
+              <div style="height: 7px; width: 85%; border-radius: 3px; background: rgba(244,236,229,.1); margin-bottom: 14px;"></div>
+              <div style="font-family: var(--serif); font-size: 13.5px; font-weight: 680; margin-bottom: 9px; color: var(--red-bright);">Ключевые понятия</div>
+              <div style="height: 7px; width: 70%; border-radius: 3px; background: rgba(244,236,229,.1); margin-bottom: 6px;"></div>
+              <div style="height: 7px; width: 55%; border-radius: 3px; background: rgba(244,236,229,.1);"></div>
             </div>
           </div>
         </div>
       </div>
-      <div class="mono" style="text-align: center; font-size: 10.5px; color: #9c8b86; margin-top: 10px;">— скриншот: запись лекции —</div>
+      <div class="mono" style="text-align: center; font-size: 10.5px; color: var(--ink-dim); margin-top: 12px;">— скриншот: запись лекции —</div>
     </div>
   </div>
 
   <!-- FEATURES: pinned index cards -->
-  <div id="features" class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 90px 24px 20px;">
-    <h2 class="reveal" style="font-size: 30px; margin-bottom: 40px; max-width: 480px;">Заметки на полях: что умеет Ruby</h2>
+  <div id="features" class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 100px 24px 20px;">
+    <div class="mono reveal" style="font-size: 12px; color: var(--red-bright); letter-spacing: .08em; margin-bottom: 12px;">Раздел 01</div>
+    <h2 class="reveal" style="font-size: 34px; font-weight: 680; margin-bottom: 44px; max-width: 480px;">Заметки на полях: что умеет Ruby</h2>
     <div class="features-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px 22px;">
 
       <div class="index-card reveal" style="--r: -1.1deg; transform: rotate(-1.1deg);">
         <div class="card-num">01</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Живой конспект</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Слова и слайды появляются на экране прямо во время лекции — сразу видно, что запись идёт.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Слова и слайды появляются на экране прямо во время лекции — сразу видно, что запись идёт.</p>
       </div>
 
       <div class="index-card reveal" style="--r: 0.8deg; transform: rotate(0.8deg);">
         <div class="card-num">02</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Без браузера</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Для лекции в аудитории ничего ставить не нужно — просто нажми запись с микрофона в приложении.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Для лекции в аудитории ничего ставить не нужно — просто нажми запись с микрофона в приложении.</p>
       </div>
 
       <div class="index-card reveal" style="--r: -0.6deg; transform: rotate(-0.6deg);">
         <div class="card-num">03</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Запуск из приложения</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Начинай запись в браузере прямо из Ruby, одной кнопкой — открывать попап расширения не нужно.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Начинай запись в браузере прямо из Ruby, одной кнопкой — открывать попап расширения не нужно.</p>
       </div>
 
       <div class="index-card reveal" style="--r: 1.3deg; transform: rotate(1.3deg);">
         <div class="card-num">04</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Чат по всем конспектам</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Спроси «какое дз по матеше» — Ruby сам найдёт нужный предмет среди всех твоих лекций.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Спроси «какое дз по матеше» — Ruby сам найдёт нужный предмет среди всех твоих лекций.</p>
       </div>
 
       <div class="index-card reveal" style="--r: -1.4deg; transform: rotate(-1.4deg);">
         <div class="card-num">05</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Всё на твоём диске</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Конспекты лежат обычными папками: предмет → лекция → notes.md. Их видно и без приложения.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Конспекты лежат обычными папками: предмет → лекция → notes.md. Их видно и без приложения.</p>
       </div>
 
       <div class="index-card reveal" style="--r: 0.5deg; transform: rotate(0.5deg);">
         <div class="card-num">06</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Один бесплатный ключ</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Работает на бесплатном тарифе Gemini — без карт и подписок, только свой API-ключ.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Работает на бесплатном тарифе Gemini — без карт и подписок, только свой API-ключ.</p>
       </div>
 
       <div class="index-card reveal" style="--r: -0.9deg; transform: rotate(-0.9deg);">
         <div class="card-num">07</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Именные чаты</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Заведи отдельный чат под ДЗ, под вопросы к зачёту — они сохраняются и не пропадают при перезапуске.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Заведи отдельный чат под ДЗ, под вопросы к зачёту — они сохраняются и не пропадают при перезапуске.</p>
       </div>
 
       <div class="index-card reveal" style="--r: 1.1deg; transform: rotate(1.1deg);">
         <div class="card-num">08</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Ловит домашку на слух</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Как только препод озвучивает задание, Ruby присылает уведомление и сохраняет момент вместе со слайдом — можно сразу скопировать в другую нейросеть.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Как только препод озвучивает задание, Ruby присылает уведомление и сохраняет момент вместе со слайдом — можно сразу скопировать в другую нейросеть.</p>
       </div>
 
       <div class="index-card reveal" style="--r: -0.4deg; transform: rotate(-0.4deg);">
         <div class="card-num">09</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Русский и English</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Интерфейс переключается на английский одной галочкой в настройках — конспекты по-прежнему пишутся на языке лекции.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Интерфейс переключается на английский одной галочкой в настройках — конспекты по-прежнему пишутся на языке лекции.</p>
       </div>
 
       <div class="index-card reveal" style="--r: 1.2deg; transform: rotate(1.2deg);">
         <div class="card-num">10</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Флеш-карточки с повторением</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Ruby сама составляет карточки по конспекту и напоминает повторить их по интервалам — как в Anki, только без переноса вручную.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Ruby сама составляет карточки по конспекту и напоминает повторить их по интервалам — как в Anki, только без переноса вручную.</p>
       </div>
 
       <div class="index-card reveal" style="--r: -0.8deg; transform: rotate(-0.8deg);">
         <div class="card-num">11</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Формулы, а не текст</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Математика, физика, финансы — формулы в конспекте рендерятся как настоящие формулы (LaTeX), а не расползаются в кашу из символов.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Математика, физика, финансы — формулы в конспекте рендерятся как настоящие формулы (LaTeX), а не расползаются в кашу из символов.</p>
       </div>
 
       <div class="index-card reveal" style="--r: 0.6deg; transform: rotate(0.6deg);">
         <div class="card-num">12</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Экспорт в PDF и Word</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: #c2b5af;">Нужно сдать конспект или приложить к отчёту — экспортируй его в PDF или Word прямо из приложения, в один клик.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Нужно сдать конспект или приложить к отчёту — экспортируй его в PDF или Word прямо из приложения, в один клик.</p>
       </div>
 
     </div>
@@ -280,30 +320,31 @@
 
   <!-- HOW IT WORKS: syllabus -->
   <div id="how" class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 90px 24px;">
-    <h2 class="reveal" style="font-size: 30px; margin-bottom: 34px; max-width: 480px;">Расписание на первую лекцию</h2>
-    <div class="reveal" style="border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink);">
+    <div class="mono reveal" style="font-size: 12px; color: var(--red-bright); letter-spacing: .08em; margin-bottom: 12px;">Раздел 02</div>
+    <h2 class="reveal" style="font-size: 34px; font-weight: 680; margin-bottom: 38px; max-width: 480px;">Расписание на первую лекцию</h2>
+    <div class="reveal" style="border-top: 1.5px solid rgba(244,236,229,.28); border-bottom: 1.5px solid rgba(244,236,229,.28);">
 
-      <div style="display: flex; gap: 26px; padding: 24px 4px; border-bottom: 1px dashed rgba(194,51,80,.3); align-items: baseline;">
-        <div class="mono" style="font-size: 22px; color: var(--red); width: 44px; flex-shrink: 0;">01</div>
+      <div style="display: flex; gap: 26px; padding: 26px 6px; border-bottom: 1px dashed rgba(221,63,101,.3); align-items: baseline; transition: padding .2s ease;">
+        <div class="mono" style="font-size: 24px; color: var(--red-bright); width: 44px; flex-shrink: 0;">01</div>
         <div>
-          <h3 style="font-size: 16px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 5px;">Установи Ruby</h3>
-          <p style="font-size: 13.5px; line-height: 1.6; color: #cfc3bd;">Скачай приложение и вставь свой бесплатный ключ с aistudio.google.com/apikey — карта не нужна.</p>
+          <h3 style="font-size: 16.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 6px;">Установи Ruby</h3>
+          <p style="font-size: 13.5px; line-height: 1.62; color: var(--ink-soft);">Скачай приложение и вставь свой бесплатный ключ с aistudio.google.com/apikey — карта не нужна.</p>
         </div>
       </div>
 
-      <div style="display: flex; gap: 26px; padding: 24px 4px; border-bottom: 1px dashed rgba(194,51,80,.3); align-items: baseline;">
-        <div class="mono" style="font-size: 22px; color: var(--red); width: 44px; flex-shrink: 0;">02</div>
+      <div style="display: flex; gap: 26px; padding: 26px 6px; border-bottom: 1px dashed rgba(221,63,101,.3); align-items: baseline;">
+        <div class="mono" style="font-size: 24px; color: var(--red-bright); width: 44px; flex-shrink: 0;">02</div>
         <div>
-          <h3 style="font-size: 16px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 5px;">Начни запись</h3>
-          <p style="font-size: 13.5px; line-height: 1.6; color: #cfc3bd;">С микрофона прямо в приложении в аудитории — или одной кнопкой в браузере для онлайн-лекции.</p>
+          <h3 style="font-size: 16.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 6px;">Начни запись</h3>
+          <p style="font-size: 13.5px; line-height: 1.62; color: var(--ink-soft);">С микрофона прямо в приложении в аудитории — или одной кнопкой в браузере для онлайн-лекции.</p>
         </div>
       </div>
 
-      <div style="display: flex; gap: 26px; padding: 24px 4px; align-items: baseline;">
-        <div class="mono" style="font-size: 22px; color: var(--red); width: 44px; flex-shrink: 0;">03</div>
+      <div style="display: flex; gap: 26px; padding: 26px 6px; align-items: baseline;">
+        <div class="mono" style="font-size: 24px; color: var(--red-bright); width: 44px; flex-shrink: 0;">03</div>
         <div>
-          <h3 style="font-size: 16px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 5px;">Получи конспект</h3>
-          <p style="font-size: 13.5px; line-height: 1.6; color: #cfc3bd;">После лекции появится готовый markdown — а потом можно спрашивать по нему в чате перед зачётом.</p>
+          <h3 style="font-size: 16.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 6px;">Получи конспект</h3>
+          <p style="font-size: 13.5px; line-height: 1.62; color: var(--ink-soft);">После лекции появится готовый markdown — а потом можно спрашивать по нему в чате перед зачётом.</p>
         </div>
       </div>
 
@@ -311,14 +352,15 @@
   </div>
 
   <!-- PRIVACY: sticky note -->
-  <div id="privacy" class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 20px 24px 96px; display: flex; justify-content: center;">
+  <div id="privacy" class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 30px 24px 110px; display: flex; justify-content: center;">
     <div class="sticky-note reveal" style="--r: -1.4deg; max-width: 560px;">
-      <h2 style="font-size: 20px; margin-bottom: 14px; font-style: italic;">Честно о том, куда уходят данные</h2>
-      <p style="font-size: 13.5px; line-height: 1.65; color: #f2dde0; margin-bottom: 12px; font-style: italic;">
+      <div class="mono" style="font-size: 11px; color: rgba(246,226,230,.65); letter-spacing: .08em; margin-bottom: 10px;">РАЗДЕЛ 03 · ПРИВАТНОСТЬ</div>
+      <h2 style="font-size: 21px; font-weight: 620; margin-bottom: 16px; font-style: italic;">Честно о том, куда уходят данные</h2>
+      <p style="font-size: 13.5px; line-height: 1.68; color: #f6e2e6; margin-bottom: 12px; font-style: italic;">
         Звук лекции, слайды и распознанный текст уходят в Gemini API — на серверы Google — чтобы расшифровать речь
         и собрать конспект. Это не «анонимно», и мы не делаем вид, что иначе.
       </p>
-      <p style="font-size: 13.5px; line-height: 1.65; color: #f2dde0; font-style: italic;">
+      <p style="font-size: 13.5px; line-height: 1.68; color: #f6e2e6; font-style: italic;">
         Сам конспект и ключ хранятся локально на твоём диске (ключ — в зашифрованном виде). Никакой телеметрии.
       </p>
     </div>
@@ -326,12 +368,17 @@
 
   <!-- FOOTER with tear -->
   <div class="tear"></div>
-  <div style="background: var(--paper-dark); padding: 26px 24px;">
+  <div style="background: var(--paper-dark); padding: 30px 24px;">
     <div class="section-pad" style="max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
-      <div class="mono" style="font-size: 12px; color: #9c8b86;">Ruby — конспект лекций, который пишется сам</div>
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <svg width="16" height="16" viewBox="0 0 18 18" style="flex-shrink: 0; opacity: .7;">
+          <path d="M9 1.5 14.5 6 9 16.5 3.5 6Z" fill="var(--red)"/>
+        </svg>
+        <div class="mono" style="font-size: 12px; color: var(--ink-dim);">Ruby — конспект лекций, который пишется сам</div>
+      </div>
       <div style="display: flex; align-items: center; gap: 18px;">
-        <a href="https://github.com/kyouki-ai/ruby" target="_blank" rel="noopener" class="mono" style="font-size: 11px; color: #9c8b86; text-decoration: underline; text-underline-offset: 2px;">GitHub</a>
-        <span class="mono" style="font-size: 11px; color: #9c8b86;">© 2026 Ruby</span>
+        <a href="https://github.com/kyouki-ai/ruby" target="_blank" rel="noopener" class="mono" style="font-size: 11px; color: var(--ink-dim); text-decoration: underline; text-underline-offset: 2px; transition: color .2s ease;" onmouseover="this.style.color='var(--red-bright)'" onmouseout="this.style.color='var(--ink-dim)'">GitHub</a>
+        <span class="mono" style="font-size: 11px; color: var(--ink-dim);">© 2026 Ruby</span>
       </div>
     </div>
   </div>

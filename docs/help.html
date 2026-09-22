@@ -6,31 +6,49 @@
 <title>Помощь — Ruby</title>
 <meta name="description" content="Частые вопросы про Ruby — конспект лекций, который пишется сам: ключи, приватность, запись, экспорт, карточки и формулы.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,380;0,9..144,560;0,9..144,680;1,9..144,560&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root { --ink: #ece4de; --ink-dim: #b9a9a3; --paper: #150d0e; --paper-dark: #1f1214; --card: #1c1213; --red: #c23350; --red-deep: #7a1f30; --rule: rgba(194,51,80,.22); }
+  :root {
+    --ink: #f4ece5; --ink-soft: #dcccc4; --ink-dim: #a8938c;
+    --paper: #130c0d; --paper-deep: #0b0607; --paper-dark: #1d1315; --card: #221517; --card-hi: #2a1a1c;
+    --red: #dd3f65; --red-bright: #f0577c; --red-deep: #7d1f32; --gold: #e7b768;
+    --rule: rgba(221,63,101,.24); --serif: 'Fraunces', Georgia, 'Iowan Old Style', serif; --mono: 'JetBrains Mono', 'Cascadia Code', 'Courier New', monospace;
+  }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  body { margin: 0; background: var(--paper); color: var(--ink); font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; }
-  h1, h2, h3 { font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; margin: 0; }
+  body {
+    margin: 0; color: var(--ink); font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background:
+      radial-gradient(1100px 720px at 12% -8%, rgba(221,63,101,.14), transparent 60%),
+      radial-gradient(900px 620px at 104% 4%, rgba(231,183,104,.08), transparent 55%),
+      var(--paper);
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 500; pointer-events: none; opacity: .05; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  h1, h2, h3 { font-family: var(--serif); margin: 0; }
   p { margin: 0; }
   a { color: inherit; }
-  .mono { font-family: 'Cascadia Code', 'Courier New', monospace; }
-  ::selection { background: rgba(179,39,62,.28); }
+  .mono { font-family: var(--mono); }
+  ::selection { background: rgba(221,63,101,.32); }
 
-  .reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity .7s cubic-bezier(.16,.8,.3,1), transform .7s cubic-bezier(.16,.8,.3,1); }
   .reveal.visible { opacity: 1; transform: translateY(0); }
 
   .tab {
-    font-family: 'Cascadia Code', 'Courier New', monospace;
-    font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--ink); text-decoration: none; padding: 10px 16px 8px;
+    font-family: var(--mono);
+    font-size: 12px; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--ink-soft); text-decoration: none; padding: 10px 16px 8px;
     background: var(--paper-dark);
     clip-path: polygon(8% 0, 92% 0, 100% 100%, 0% 100%);
-    transition: background .2s ease, color .2s ease;
+    transition: background .2s ease, color .2s ease, transform .2s ease;
   }
-  .tab:hover { background: var(--red); color: #fff; }
-  .tab-cta { background: var(--red); color: #fff; }
-  .tab-cta:hover { background: #8f1f33; }
+  .tab:hover { background: var(--red); color: #fff; transform: translateY(-1px); }
+  .tab-cta { background: var(--red); color: #fff; box-shadow: 0 4px 14px -4px rgba(221,63,101,.55); }
+  .tab-cta:hover { background: var(--red-bright); }
 
   .tear {
     height: 14px;
@@ -41,31 +59,34 @@
     background-color: var(--paper-dark);
   }
 
-  .faq-section { margin-bottom: 44px; }
+  .faq-section { margin-bottom: 46px; }
   .faq-section-title {
-    font-family: 'Cascadia Code', 'Courier New', monospace; font-size: 12px; color: var(--red);
+    font-family: var(--mono); font-size: 12px; color: var(--red-bright);
     letter-spacing: .08em; text-transform: uppercase; margin-bottom: 14px;
   }
   .faq-item {
-    border-bottom: 1px dashed rgba(194,51,80,.3);
-    padding: 16px 2px;
+    border-bottom: 1px dashed rgba(221,63,101,.3);
+    padding: 17px 4px;
+    transition: background .2s ease;
+    border-radius: 6px;
   }
-  .faq-item:first-child { border-top: 1px dashed rgba(194,51,80,.3); }
+  .faq-item:first-child { border-top: 1px dashed rgba(221,63,101,.3); }
   .faq-item summary {
     cursor: pointer; list-style: none; font-size: 15px; font-weight: 600;
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
   .faq-item summary::-webkit-details-marker { display: none; }
   .faq-item summary::after {
-    content: '+'; font-family: Georgia, serif; font-size: 20px; color: var(--red); flex-shrink: 0;
-    transition: transform .2s ease;
+    content: '+'; font-family: var(--serif); font-size: 20px; color: var(--red-bright); flex-shrink: 0;
+    transition: transform .25s cubic-bezier(.16,.8,.3,1);
   }
   .faq-item[open] summary::after { transform: rotate(45deg); }
-  .faq-item p { margin-top: 12px; font-size: 13.5px; line-height: 1.65; color: #cfc3bd; }
+  .faq-item[open] summary { color: var(--red-bright); }
+  .faq-item p { margin-top: 12px; font-size: 13.5px; line-height: 1.68; color: var(--ink-soft); }
   .faq-item p + p { margin-top: 8px; }
   .faq-item code {
-    font-family: 'Cascadia Code', 'Courier New', monospace; font-size: 12.5px;
-    background: var(--card); padding: 1px 5px; border-radius: 4px;
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--card); padding: 2px 6px; border-radius: 4px; color: var(--gold);
   }
 
   .mobile-nav-toggle { display: none; }
@@ -83,15 +104,15 @@
 <div style="width: 100%; overflow-x: hidden;">
 
   <!-- NAV -->
-  <div style="position: sticky; top: 0; z-index: 40; background: var(--paper); border-bottom: 1.5px solid var(--ink);">
+  <div style="position: sticky; top: 0; z-index: 40; background: rgba(19,12,13,.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1.5px solid rgba(244,236,229,.16);">
     <div class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 14px 24px 0; display: flex; align-items: flex-end; gap: 22px;">
       <a href="index.html" style="display: flex; align-items: center; gap: 8px; padding-bottom: 12px; text-decoration: none; color: inherit;">
-        <svg width="20" height="20" viewBox="0 0 18 18" style="flex-shrink: 0;">
+        <svg width="21" height="21" viewBox="0 0 18 18" style="flex-shrink: 0;">
           <path d="M9 1.5 14.5 6 9 16.5 3.5 6Z" fill="var(--red)"/>
           <path d="M9 1.5 14.5 6 9 6Z" fill="rgba(255,255,255,0.35)"/>
           <path d="M3.5 6 9 6 9 16.5Z" fill="rgba(0,0,0,0.15)"/>
         </svg>
-        <span style="font-family: Georgia, serif; font-size: 18px; font-weight: 700;">Ruby</span>
+        <span style="font-family: var(--serif); font-size: 19px; font-weight: 680;">Ruby</span>
       </a>
       <div style="flex-grow: 1;"></div>
       <div class="desktop-nav" style="display: flex; align-items: flex-end; gap: 6px;">
@@ -104,19 +125,22 @@
         <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 5h13M2.5 9h13M2.5 13h13"/></svg>
       </button>
     </div>
-    <div class="mobile-menu" id="mobile-menu" style="border-top: 1px solid var(--rule); padding: 14px 24px 18px; flex-direction: column; gap: 12px; font-family: 'Cascadia Code', monospace; font-size: 13px; text-transform: uppercase;">
+    <div class="mobile-menu" id="mobile-menu" style="border-top: 1px solid var(--rule); padding: 14px 24px 18px; flex-direction: column; gap: 12px; font-family: var(--mono); font-size: 13px; text-transform: uppercase;">
       <a href="index.html#features">Возможности</a>
       <a href="index.html#how">Как это работает</a>
-      <a href="help.html" style="color: var(--red); font-weight: 700;">Помощь</a>
+      <a href="help.html" style="color: var(--red-bright); font-weight: 700;">Помощь</a>
       <a href="download.html">Скачать</a>
     </div>
   </div>
 
   <!-- PAGE HEADER -->
-  <div class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 56px 24px 20px;">
-    <div class="mono reveal" style="font-size: 12px; color: var(--red); letter-spacing: .08em; margin-bottom: 14px;">Тема: частые вопросы</div>
-    <h1 class="reveal" style="font-size: 40px; line-height: 1.15; letter-spacing: -.3px; max-width: 640px;">Помощь</h1>
-    <p class="reveal" style="margin-top: 18px; font-size: 15.5px; line-height: 1.65; color: #cfc3bd; max-width: 600px;">
+  <div class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 64px 24px 20px;">
+    <div class="mono reveal" style="font-size: 12px; color: var(--red-bright); letter-spacing: .08em; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--red-bright); box-shadow: 0 0 10px var(--red-bright); flex-shrink: 0;"></span>
+      Тема: частые вопросы
+    </div>
+    <h1 class="reveal" style="font-size: 44px; font-weight: 680; line-height: 1.12; letter-spacing: -.4px; max-width: 640px;">Помощь</h1>
+    <p class="reveal" style="margin-top: 20px; font-size: 15.5px; line-height: 1.68; color: var(--ink-soft); max-width: 600px;">
       Собрали здесь ответы на вопросы, которые обычно возникают в первые пять минут с Ruby — и на пару таких, что всплывают позже.
     </p>
   </div>
@@ -240,7 +264,7 @@
 
       <details class="faq-item">
         <summary>Не нашёл ответ на свой вопрос</summary>
-        <p>Загляни в <a href="https://github.com/kyouki-ai/ruby" target="_blank" rel="noopener" style="color: var(--red); text-decoration: underline;">репозиторий на GitHub</a> — там весь исходный код и можно открыть issue.</p>
+        <p>Загляни в <a href="https://github.com/kyouki-ai/ruby" target="_blank" rel="noopener" style="color: var(--red-bright); text-decoration: underline;">репозиторий на GitHub</a> — там весь исходный код и можно открыть issue.</p>
       </details>
     </div>
 
@@ -248,12 +272,17 @@
 
   <!-- FOOTER -->
   <div class="tear"></div>
-  <div style="background: var(--paper-dark); padding: 26px 24px;">
+  <div style="background: var(--paper-dark); padding: 30px 24px;">
     <div class="section-pad" style="max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
-      <div class="mono" style="font-size: 12px; color: #9c8b86;">Ruby — конспект лекций, который пишется сам</div>
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <svg width="16" height="16" viewBox="0 0 18 18" style="flex-shrink: 0; opacity: .7;">
+          <path d="M9 1.5 14.5 6 9 16.5 3.5 6Z" fill="var(--red)"/>
+        </svg>
+        <div class="mono" style="font-size: 12px; color: var(--ink-dim);">Ruby — конспект лекций, который пишется сам</div>
+      </div>
       <div style="display: flex; align-items: center; gap: 18px;">
-        <a href="https://github.com/kyouki-ai/ruby" target="_blank" rel="noopener" class="mono" style="font-size: 11px; color: #9c8b86; text-decoration: underline; text-underline-offset: 2px;">GitHub</a>
-        <span class="mono" style="font-size: 11px; color: #9c8b86;">© 2026 Ruby</span>
+        <a href="https://github.com/kyouki-ai/ruby" target="_blank" rel="noopener" class="mono" style="font-size: 11px; color: var(--ink-dim); text-decoration: underline; text-underline-offset: 2px; transition: color .2s ease;" onmouseover="this.style.color='var(--red-bright)'" onmouseout="this.style.color='var(--ink-dim)'">GitHub</a>
+        <span class="mono" style="font-size: 11px; color: var(--ink-dim);">© 2026 Ruby</span>
       </div>
     </div>
   </div>
