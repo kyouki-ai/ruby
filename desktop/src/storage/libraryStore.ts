@@ -251,7 +251,20 @@ export function buildFullLibraryContext(libraryPath: string): string {
 
 export interface SearchResults {
   subjects: string[];
-  lectures: LectureMeta[];
+  // matchSnippet is only set when the hit came from the note body, not the
+  // title/subject (which the UI already shows plainly) - gives the user a
+  // clue why an otherwise-unrelated-looking title matched.
+  lectures: (LectureMeta & { matchSnippet?: string })[];
+}
+
+/** A short excerpt around the first match, for search hits that come from the note body rather than the title. */
+function extractSnippet(text: string, query: string, radius = 60): string {
+  const idx = text.toLowerCase().indexOf(query);
+  if (idx === -1) return '';
+  const start = Math.max(0, idx - radius);
+  const end = Math.min(text.length, idx + query.length + radius);
+  const excerpt = text.slice(start, end).replace(/\s+/g, ' ').trim();
+  return (start > 0 ? '…' : '') + excerpt + (end < text.length ? '…' : '');
 }
 
 /**
@@ -268,11 +281,22 @@ export function searchLibrary(libraryPath: string, query: string): SearchResults
   const allSubjects = listSubjects(libraryPath);
   const subjects = allSubjects.filter((s) => s.toLowerCase().includes(q));
 
-  const lectures: LectureMeta[] = [];
+  const lectures: (LectureMeta & { matchSnippet?: string })[] = [];
   for (const subject of allSubjects) {
     for (const lecture of listLectures(libraryPath, subject)) {
       if (lecture.title.toLowerCase().includes(q) || subject.toLowerCase().includes(q)) {
         lectures.push(lecture);
+        continue;
+      }
+      // Falls back to the note body itself - a title-only search misses
+      // anything that was actually discussed but didn't make the heading.
+      try {
+        const markdown = loadLectureMarkdown(libraryPath, subject, lecture.folderName);
+        if (markdown.toLowerCase().includes(q)) {
+          lectures.push({ ...lecture, matchSnippet: extractSnippet(markdown, q) });
+        }
+      } catch {
+        // notes.md missing/unreadable - just isn't a body-text match.
       }
     }
   }

@@ -101,3 +101,41 @@ export function listDueFlashcards(libraryPath: string): DueDeckSummary[] {
 
   return summaries;
 }
+
+// A simple "days in a row reviewed at least one card" counter - one file per
+// library, not per lecture, since the streak is about the study habit as a
+// whole rather than any single deck.
+export interface StudyStreak {
+  lastReviewDate: string; // yyyy-mm-dd, local date of the last counted review
+  currentStreak: number;
+  longestStreak: number;
+}
+
+function streakPath(libraryPath: string): string {
+  return path.join(libraryPath, 'study-streak.json');
+}
+
+export function loadStudyStreak(libraryPath: string): StudyStreak {
+  try {
+    return JSON.parse(fs.readFileSync(streakPath(libraryPath), 'utf-8'));
+  } catch {
+    return { lastReviewDate: '', currentStreak: 0, longestStreak: 0 };
+  }
+}
+
+/** Call once per review - a no-op if today was already counted, so reviewing 20 cards in a row only bumps the streak once. */
+export function bumpStudyStreak(libraryPath: string): StudyStreak {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const streak = loadStudyStreak(libraryPath);
+  if (streak.lastReviewDate === todayKey) return streak;
+
+  const yesterdayKey = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const currentStreak = streak.lastReviewDate === yesterdayKey ? streak.currentStreak + 1 : 1;
+  const updated: StudyStreak = {
+    lastReviewDate: todayKey,
+    currentStreak,
+    longestStreak: Math.max(streak.longestStreak, currentStreak),
+  };
+  fs.writeFileSync(streakPath(libraryPath), JSON.stringify(updated, null, 2), 'utf-8');
+  return updated;
+}

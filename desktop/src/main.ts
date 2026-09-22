@@ -16,6 +16,7 @@ import {
 } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { execFile } from 'child_process';
 
 // Only one copy of this app may run at a time - a second launch would try to
 // bind the same WebSocket port and crash with EADDRINUSE, leaving a stray
@@ -821,10 +822,12 @@ function setupIpcHandlers(): void {
       const cards = flashcards.loadFlashcards(settings.libraryPath, subject, folderName);
       const updated = cards.map((c) => (c.id === cardId ? flashcards.reviewCard(c, rating) : c));
       flashcards.saveFlashcards(settings.libraryPath, subject, folderName, updated);
+      flashcards.bumpStudyStreak(settings.libraryPath);
       return updated.find((c) => c.id === cardId) ?? null;
     }
   );
   ipcMain.handle(channels.IPC_LIST_DUE_FLASHCARDS, () => flashcards.listDueFlashcards(settings.libraryPath));
+  ipcMain.handle(channels.IPC_GET_STUDY_STREAK, () => flashcards.loadStudyStreak(settings.libraryPath));
 
   ipcMain.handle(channels.IPC_FIND_IN_PAGE, (_e, text: string, forward: boolean, findNext: boolean) => {
     if (!text) {
@@ -873,6 +876,32 @@ function setupIpcHandlers(): void {
       return { saved: true };
     }
   );
+
+  // One-click "everything" backup - the whole library folder (notes,
+  // photos, schedule, flashcards) zipped into a single file, in case the
+  // OneDrive-style safety net some users rely on isn't actually there for
+  // everyone. Shells out to PowerShell's Compress-Archive instead of adding
+  // a zip dependency - this app only ever targets Windows anyway.
+  ipcMain.handle(channels.IPC_EXPORT_LIBRARY_BACKUP, async () => {
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      defaultPath: `Ruby-backup-${new Date().toISOString().slice(0, 10)}.zip`,
+      filters: [{ name: 'ZIP', extensions: ['zip'] }],
+    });
+    if (result.canceled || !result.filePath) return { saved: false };
+
+    const psQuote = (value: string) => `'${value.replace(/'/g, "''")}'`;
+    const sourceGlob = psQuote(path.join(settings.libraryPath, '*'));
+    const destination = psQuote(result.filePath);
+
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', `Compress-Archive -Path ${sourceGlob} -DestinationPath ${destination} -Force`],
+        (err) => (err ? reject(err) : resolve())
+      );
+    });
+    return { saved: true };
+  });
 }
 
 function escapeHtmlServer(text: string): string {

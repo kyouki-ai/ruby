@@ -162,7 +162,7 @@ body {
 .tab-btn:hover { color: var(--text); background: var(--bg-hover); }
 .tab-btn.active { color: var(--text); background: var(--bg-active); }
 
-.mode-switch { display: flex; gap: 2px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+.mode-switch { display: flex; gap: 2px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px; padding: 3px; flex-shrink: 0; }
 .mode-switch-btn {
   background: transparent;
   border: none;
@@ -172,6 +172,7 @@ body {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
 }
 .mode-switch-btn:hover { color: var(--text); }
 .mode-switch-btn.active { color: var(--accent-text); background: var(--accent); }
@@ -363,6 +364,45 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 /* ---------- Calendar ---------- */
 
 .calendar-content { display: flex; flex-direction: column; gap: 22px; overflow-y: auto; }
+.calendar-stats {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.calendar-stat { display: flex; flex-direction: column; gap: 2px; }
+.calendar-stat-num { font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; font-size: 24px; color: var(--accent); line-height: 1.1; }
+.calendar-stat-label { font-size: 12px; color: var(--text-dim); }
+.calendar-entry-today { border-color: var(--accent); }
+.calendar-entry-live { background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated)); border-color: var(--accent); }
+.calendar-live-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+.calendar-entry-record-btn {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.calendar-entry-record-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 .calendar-day-title {
   font-size: 12.5px;
   font-weight: 700;
@@ -435,7 +475,19 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
   width: 280px;
   color: var(--text-dim);
 }
+.search-popover-wrap { position: relative; }
+.search-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  animation: fade-in-up 0.15s ease;
+  -webkit-app-region: no-drag;
+}
+.search-popover .search-box { width: 260px; }
 .search-box input {
+  flex: 1;
+  min-width: 0;
   border: none;
   background: none;
   color: var(--text);
@@ -835,6 +887,8 @@ main { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: 
 .note-editor:focus { outline: none; border-color: var(--accent); }
 
 .search-tag { font-size: 11.5px; color: var(--text-dim); font-weight: 400; }
+.search-snippet { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; margin-top: 2px; }
+.search-schedule-section { margin-top: 8px; }
 
 /* ---------- Live tab empty state ---------- */
 

@@ -365,6 +365,24 @@ document.getElementById('copy-btn').innerHTML = `${icon('copy', 15)}<span>${esca
 document.getElementById('lib-back-btn').innerHTML = icon('chevronLeft', 18);
 document.getElementById('search-icon').innerHTML = icon('search', 16);
 
+// The search box lives behind a topbar icon button instead of a permanent
+// input - a fixed-width text box never fit cleanly next to the nav tabs at
+// smaller window sizes, an icon does.
+const searchToggleBtn = document.getElementById('search-toggle-btn');
+const searchPopover = document.getElementById('search-popover');
+searchToggleBtn.innerHTML = icon('search', 17);
+searchToggleBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const opening = searchPopover.style.display === 'none';
+  searchPopover.style.display = opening ? 'flex' : 'none';
+  if (opening) setTimeout(() => searchInput.focus(), 0);
+});
+document.addEventListener('click', (e) => {
+  if (searchPopover.style.display !== 'none' && e.target !== searchToggleBtn && !searchPopover.contains(e.target)) {
+    searchPopover.style.display = 'none';
+  }
+});
+
 document.getElementById('copy-chrome-url-btn').addEventListener('click', (e) => {
   window.lectureApp.copyText('chrome://extensions');
   const original = e.currentTarget.textContent;
@@ -864,9 +882,17 @@ const searchInput = document.getElementById('search-input');
 
 const libraryState = { view: 'grid', subject: null };
 
+// The search box lives in the topbar now, not inside the library tab, so
+// it's visible (and usable) from chat/calendar too - typing anywhere jumps
+// to the library tab to show results, same as clicking a search hit always
+// has.
 searchInput.addEventListener('input', () => {
-  if (searchInput.value.trim()) renderSearchResults();
-  else openSubjectGrid();
+  if (searchInput.value.trim()) {
+    switchToTab('history');
+    renderSearchResults();
+  } else if (libraryState.view === 'search') {
+    openSubjectGrid();
+  }
 });
 
 async function openSubjectGrid() {
@@ -876,6 +902,7 @@ async function openSubjectGrid() {
   libTitle.textContent = t('library.title');
   libBackBtn.style.display = 'none';
   document.getElementById('lib-chat-btn').style.display = 'none';
+  document.getElementById('lib-export-btn').style.display = 'none';
 
   const reviewBtn = document.getElementById('lib-review-btn');
   const dueSummaries = await window.lectureApp.listDueFlashcards();
@@ -898,6 +925,7 @@ async function openSubjectGrid() {
     const lastActivity = stats.lastActivityDate
       ? new Date(stats.lastActivityDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
       : '—';
+    const streak = await window.lectureApp.getStudyStreak();
     const statsBar = document.createElement('div');
     statsBar.className = 'library-stats';
     statsBar.innerHTML = `
@@ -905,6 +933,7 @@ async function openSubjectGrid() {
       <div class="library-stat"><span class="library-stat-num">${stats.lectureCount}</span><span class="library-stat-label">${pluralLectures(stats.lectureCount)} записано</span></div>
       <div class="library-stat"><span class="library-stat-num">${hoursLabel}</span><span class="library-stat-label">${pluralForm(Math.round(hours), 'час', 'часа', 'часов')} расшифровано</span></div>
       <div class="library-stat"><span class="library-stat-num">${lastActivity}</span><span class="library-stat-label">последняя запись</span></div>
+      ${streak.currentStreak > 0 ? `<div class="library-stat"><span class="library-stat-num">${streak.currentStreak}</span><span class="library-stat-label">${pluralForm(streak.currentStreak, 'день подряд', 'дня подряд', 'дней подряд')} повторяешь карточки</span></div>` : ''}
     `;
     wrapper.appendChild(statsBar);
   }
@@ -960,10 +989,41 @@ async function openSubject(subject) {
     openChatThread(thread.id, { backAction: () => openSubject(subject) });
   };
 
+  const exportBtn = document.getElementById('lib-export-btn');
+  exportBtn.style.display = 'inline-flex';
+  exportBtn.innerHTML = `${icon('download', 14)}<span>${escapeHtml(t('note.export'))}</span>`;
+  exportBtn.onclick = (e) => {
+    e.stopPropagation();
+    openMenu(e.currentTarget, [
+      { label: t('note.exportPdf'), icon: 'download', onClick: () => exportWholeSubject(subject, 'pdf') },
+      { label: t('note.exportDoc'), icon: 'download', onClick: () => exportWholeSubject(subject, 'doc') },
+    ]);
+  };
+
   const lectures = await window.lectureApp.listLectures(subject);
   const subjectMeta = await window.lectureApp.getSubjectMeta(subject);
 
   setContent(renderGroupBoard(subject, subjectMeta, lectures));
+}
+
+/** Combines every lecture in a subject into one exported file - the same per-lecture export IPC, just with all their rendered HTML concatenated first. */
+async function exportWholeSubject(subject, format) {
+  const exportBtn = document.getElementById('lib-export-btn');
+  const original = exportBtn.innerHTML;
+  exportBtn.disabled = true;
+  try {
+    const lectures = await window.lectureApp.listLectures(subject);
+    const sections = [];
+    for (const lecture of [...lectures].reverse()) {
+      const markdown = await window.lectureApp.loadLecture(subject, lecture.folderName);
+      const date = new Date(lecture.date).toLocaleDateString(getLang() === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+      sections.push(`<h1>${escapeHtml(lecture.title)}</h1><p><em>${escapeHtml(date)}</em></p>${renderMarkdown(markdown)}`);
+    }
+    await window.lectureApp.exportNote(subject, sections.join('<hr/>'), format);
+  } finally {
+    exportBtn.disabled = false;
+    exportBtn.innerHTML = original;
+  }
 }
 
 // Free-form drag-and-drop board: lectures live in user-named groups
@@ -1156,6 +1216,7 @@ async function openNote(subject, lecture, backTo) {
   libBackBtn.style.display = 'flex';
   libBackBtn.onclick = () => (backTo === 'search' ? renderSearchResults() : openSubject(subject));
   document.getElementById('lib-review-btn').style.display = 'none';
+  document.getElementById('lib-export-btn').style.display = 'none';
   const chatBtn = document.getElementById('lib-chat-btn');
   chatBtn.style.display = 'inline-flex';
   chatBtn.innerHTML = `${icon('chat', 14)}<span>${escapeHtml(t('library.chatByLecture'))}</span>`;
@@ -1526,13 +1587,17 @@ async function renderSearchResults() {
   libTitle.textContent = t('library.searchResults');
   libBackBtn.style.display = 'none';
   document.getElementById('lib-chat-btn').style.display = 'none';
+  document.getElementById('lib-export-btn').style.display = 'none';
   document.getElementById('lib-review-btn').style.display = 'none';
 
-  const { subjects, lectures } = await window.lectureApp.searchLectures(searchInput.value.trim());
-  if (subjects.length === 0 && lectures.length === 0) {
+  const query = searchInput.value.trim();
+  const { subjects, lectures } = await window.lectureApp.searchLectures(query);
+  const scheduleMatches = await searchSchedule(query);
+  if (subjects.length === 0 && lectures.length === 0 && scheduleMatches.length === 0) {
     setContent(emptyState(t('library.notFound')));
     return;
   }
+  const wrapper = document.createElement('div');
   const grid = document.createElement('div');
   grid.className = 'card-grid';
   for (const subject of subjects) {
@@ -1563,7 +1628,27 @@ async function renderSearchResults() {
     const groupName = lecture.groupId ? groupNamesBySubject.get(lecture.subject)?.get(lecture.groupId) ?? null : null;
     grid.appendChild(lectureCard(lecture, lecture.subject, () => openNote(lecture.subject, lecture, 'search'), true, groupName));
   }
-  setContent(grid);
+  wrapper.appendChild(grid);
+
+  if (scheduleMatches.length > 0) {
+    const section = document.createElement('div');
+    section.className = 'calendar-day-section search-schedule-section';
+    const title = document.createElement('div');
+    title.className = 'calendar-day-title';
+    title.textContent = t('calendar.title');
+    section.appendChild(title);
+    for (const entry of scheduleMatches) section.appendChild(calendarEntryRow(entry, entry.type === 'once', false));
+    wrapper.appendChild(section);
+  }
+
+  setContent(wrapper);
+}
+
+async function searchSchedule(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const entries = await window.lectureApp.listSchedule();
+  return entries.filter((e) => [e.title, e.subject, e.category, e.location, e.teacher].some((f) => f && f.toLowerCase().includes(q)));
 }
 
 function setContent(node) {
@@ -1616,6 +1701,7 @@ function lectureCard(lecture, subject, onClick, showSubjectTag = false, groupNam
     <button class="card-menu-btn">${icon('more', 16)}</button>
     <div class="card-title">${escapeHtml(lecture.title)}</div>
     ${tagText ? `<div class="search-tag">${escapeHtml(tagText)}</div>` : ''}
+    ${lecture.matchSnippet ? `<div class="search-snippet">${escapeHtml(lecture.matchSnippet)}</div>` : ''}
     <div class="card-meta">${date} · ${Math.round(lecture.durationSec / 60)} ${getLang() === 'en' ? 'min' : 'мин'}</div>
   `;
   card.addEventListener('click', () => onClick());
@@ -2067,6 +2153,28 @@ document.getElementById('reveal-folder-btn').addEventListener('click', () => {
   window.lectureApp.revealLibraryFolder();
 });
 
+const backupBtn = document.getElementById('backup-library-btn');
+const backupStatus = document.getElementById('backup-status');
+backupBtn.addEventListener('click', async () => {
+  const original = backupBtn.textContent;
+  backupBtn.disabled = true;
+  backupStatus.textContent = '';
+  try {
+    const { saved } = await window.lectureApp.exportLibraryBackup();
+    if (saved) {
+      backupStatus.textContent = t('settings.storage.backupDone');
+      backupStatus.className = 'hint success';
+    }
+  } catch (err) {
+    backupStatus.textContent = String(err.message || err);
+    backupStatus.className = 'hint';
+  } finally {
+    backupBtn.disabled = false;
+    backupBtn.textContent = original;
+    setTimeout(() => (backupStatus.textContent = ''), 5000);
+  }
+});
+
 async function loadSettingsIntoForm() {
   const settings = await window.lectureApp.getSettings();
   for (const [key, value] of Object.entries(settings)) {
@@ -2108,7 +2216,22 @@ async function openCalendar() {
   content.innerHTML = '';
 
   const todayIdx = mondayFirstDayIndex(new Date());
-  for (let day = 0; day < 7; day++) {
+  const todayCount = entries.filter((e) => e.type === 'weekly' ? e.dayOfWeek === todayIdx : e.date === new Date().toISOString().slice(0, 10)).length;
+  const weekCount = entries.filter((e) => e.type === 'weekly').length;
+
+  const stats = document.createElement('div');
+  stats.className = 'calendar-stats';
+  stats.innerHTML = `
+    <div class="calendar-stat"><span class="calendar-stat-num">${todayCount}</span><span class="calendar-stat-label">${escapeHtml(t('calendar.today.count', { count: todayCount }))}</span></div>
+    <div class="calendar-stat"><span class="calendar-stat-num">${weekCount}</span><span class="calendar-stat-label">${escapeHtml(t('calendar.week.count', { count: weekCount }))}</span></div>
+  `;
+  content.appendChild(stats);
+
+  // Days start from today and wrap around, rather than always Monday-first -
+  // glancing at the calendar should show what's coming up next, not
+  // whichever day already happened earlier this week.
+  for (let offset = 0; offset < 7; offset++) {
+    const day = (todayIdx + offset) % 7;
     const dayEntries = entries
       .filter((e) => e.type === 'weekly' && e.dayOfWeek === day)
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -2126,7 +2249,7 @@ async function openCalendar() {
       empty.textContent = t('calendar.empty');
       section.appendChild(empty);
     } else {
-      for (const entry of dayEntries) section.appendChild(calendarEntryRow(entry));
+      for (const entry of dayEntries) section.appendChild(calendarEntryRow(entry, false, day === todayIdx));
     }
     content.appendChild(section);
   }
@@ -2141,25 +2264,44 @@ async function openCalendar() {
     title.className = 'calendar-day-title';
     title.textContent = t('calendar.upcoming');
     section.appendChild(title);
-    for (const entry of onceEntries) section.appendChild(calendarEntryRow(entry, true));
+    const todayKey = new Date().toISOString().slice(0, 10);
+    for (const entry of onceEntries) section.appendChild(calendarEntryRow(entry, true, entry.date === todayKey));
     content.appendChild(section);
   }
 }
 
-function calendarEntryRow(entry, showDate = false) {
+function isHappeningNow(entry, isToday) {
+  if (!isToday || !entry.endTime) return false;
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const [startH, startM] = entry.startTime.split(':').map(Number);
+  const [endH, endM] = entry.endTime.split(':').map(Number);
+  return nowMinutes >= startH * 60 + startM && nowMinutes < endH * 60 + endM;
+}
+
+function calendarEntryRow(entry, showDate, isToday) {
   const row = document.createElement('div');
-  row.className = 'calendar-entry';
+  const liveNow = isHappeningNow(entry, isToday);
+  row.className = 'calendar-entry' + (isToday ? ' calendar-entry-today' : '') + (liveNow ? ' calendar-entry-live' : '');
   const dateLabel = showDate && entry.date ? new Date(entry.date).toLocaleDateString(getLang() === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short' }) + ' · ' : '';
-  const metaParts = [entry.category, entry.location, entry.teacher].filter(Boolean);
+  const metaParts = [entry.subject, entry.category, entry.location, entry.teacher].filter(Boolean);
   row.innerHTML = `
     <div class="calendar-entry-time">${escapeHtml(dateLabel)}${escapeHtml(entry.startTime)}${entry.endTime ? '–' + escapeHtml(entry.endTime) : ''}</div>
     <div class="calendar-entry-body">
-      <div class="calendar-entry-title">${escapeHtml(entry.title)}</div>
+      <div class="calendar-entry-title">${escapeHtml(entry.title)}${liveNow ? `<span class="calendar-live-badge">${escapeHtml(t('calendar.liveNow'))}</span>` : ''}</div>
       ${metaParts.length ? `<div class="calendar-entry-meta">${escapeHtml(metaParts.join(' · '))}</div>` : ''}
     </div>
+    ${entry.subject ? `<button class="calendar-entry-record-btn" title="${escapeHtml(t('calendar.record'))}">${icon('mic', 14)}</button>` : ''}
     <button class="calendar-entry-menu-btn">${icon('more', 15)}</button>
   `;
   row.addEventListener('click', () => openScheduleModal(entry));
+  const recordBtn = row.querySelector('.calendar-entry-record-btn');
+  if (recordBtn) {
+    recordBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startRecordingFromCalendarEntry(entry);
+    });
+  }
   row.querySelector('.calendar-entry-menu-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     openMenu(e.currentTarget, [
@@ -2180,6 +2322,29 @@ function calendarEntryRow(entry, showDate = false) {
   return row;
 }
 
+// Starting a recording from a calendar entry links the two previously
+// independent modules: it resolves (or creates) the subject's group that
+// matches the entry's free-form category, so the recording lands in the
+// same column the user would have filed it under by hand.
+async function startRecordingFromCalendarEntry(entry) {
+  if (!entry.subject) {
+    showAlert(t('calendar.record'), t('calendar.recordNeedsSubject'));
+    return;
+  }
+  let groupId;
+  if (entry.category) {
+    const subjectMeta = await window.lectureApp.getSubjectMeta(entry.subject);
+    const existing = subjectMeta.groups.find((g) => g.name.trim().toLowerCase() === entry.category.trim().toLowerCase());
+    groupId = existing ? existing.id : (await window.lectureApp.createLectureGroup(entry.subject, entry.category)).id;
+  }
+  const dateLabel = new Date().toLocaleDateString(getLang() === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'long' });
+  const meta = await window.lectureApp.createLecture(entry.subject, `${entry.title} · ${dateLabel}`, groupId);
+  openRecordingView(entry.subject, meta, () => {
+    switchToTab('calendar');
+    openCalendar();
+  });
+}
+
 document.getElementById('calendar-add-btn').innerHTML = `${icon('plus', 16)}<span>${escapeHtml(t('calendar.add'))}</span>`;
 document.getElementById('schedule-modal-close-btn').innerHTML = icon('winClose', 15);
 
@@ -2197,10 +2362,21 @@ function updateScheduleTypeRows() {
 }
 scheduleForm.querySelectorAll('input[name="schedule-type"]').forEach((el) => el.addEventListener('change', updateScheduleTypeRows));
 
-function openScheduleModal(entry) {
+async function openScheduleModal(entry) {
   editingScheduleId = entry ? entry.id : null;
   document.getElementById('schedule-modal-title').textContent = t(entry ? 'calendar.editTitle' : 'calendar.addTitle');
   scheduleDeleteBtn.style.display = entry ? '' : 'none';
+
+  const subjectSelect = document.getElementById('schedule-subject-select');
+  const subjects = await window.lectureApp.listSubjects();
+  subjectSelect.innerHTML = `<option value="">${escapeHtml(t('calendar.field.subjectNone'))}</option>`;
+  for (const subject of subjects) {
+    const option = document.createElement('option');
+    option.value = subject;
+    option.textContent = subject;
+    subjectSelect.appendChild(option);
+  }
+  subjectSelect.value = entry?.subject || '';
 
   document.getElementById('schedule-title-input').value = entry ? entry.title : '';
   document.getElementById('schedule-category-input').value = entry?.category || '';
@@ -2242,6 +2418,7 @@ scheduleForm.addEventListener('submit', async (e) => {
   const entry = {
     id: editingScheduleId || undefined,
     title: document.getElementById('schedule-title-input').value.trim(),
+    subject: document.getElementById('schedule-subject-select').value || undefined,
     category: document.getElementById('schedule-category-input').value.trim() || undefined,
     type,
     dayOfWeek: type === 'weekly' ? Number(document.getElementById('schedule-day-select').value) : undefined,

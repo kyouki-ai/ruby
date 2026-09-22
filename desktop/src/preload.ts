@@ -5,7 +5,7 @@ import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults, Subj
 import type { ChatThread, ChatThreadMeta } from './storage/chatStore';
 import type { AssignmentEntry } from './assignments/assignmentDetector';
 import type { NotesDetailLevel } from './gemini/notesBuilder';
-import type { Flashcard, ReviewRating, DueDeckSummary } from './storage/flashcardStore';
+import type { Flashcard, ReviewRating, DueDeckSummary, StudyStreak } from './storage/flashcardStore';
 import type { ScheduleEntry } from './storage/scheduleStore';
 
 // Everything the renderer is allowed to touch. No direct Node/Electron
@@ -136,6 +136,7 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_DELETE_LECTURE_PHOTO, subject, folderName, fileName),
   getLecturePhoto: (subject: string, folderName: string, fileName: string): Promise<string> =>
     ipcRenderer.invoke(channels.IPC_GET_LECTURE_PHOTO, subject, folderName, fileName),
+  exportLibraryBackup: (): Promise<{ saved: boolean }> => ipcRenderer.invoke(channels.IPC_EXPORT_LIBRARY_BACKUP),
 
   listSchedule: (): Promise<ScheduleEntry[]> => ipcRenderer.invoke(channels.IPC_LIST_SCHEDULE),
   saveScheduleEntry: (entry: Omit<ScheduleEntry, 'id'> & { id?: string }): Promise<ScheduleEntry> =>
@@ -165,6 +166,7 @@ contextBridge.exposeInMainWorld('lectureApp', {
   reviewFlashcard: (subject: string, folderName: string, cardId: string, rating: ReviewRating): Promise<Flashcard | null> =>
     ipcRenderer.invoke(channels.IPC_REVIEW_FLASHCARD, subject, folderName, cardId, rating),
   listDueFlashcards: (): Promise<DueDeckSummary[]> => ipcRenderer.invoke(channels.IPC_LIST_DUE_FLASHCARDS),
+  getStudyStreak: (): Promise<StudyStreak> => ipcRenderer.invoke(channels.IPC_GET_STUDY_STREAK),
 
   exportNote: (title: string, bodyHtml: string, format: 'pdf' | 'doc'): Promise<{ saved: boolean }> =>
     ipcRenderer.invoke(channels.IPC_EXPORT_NOTE, title, bodyHtml, format),

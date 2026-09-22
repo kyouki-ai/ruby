@@ -99,6 +99,9 @@ export const IPC_ADD_LECTURE_PHOTOS = 'add-lecture-photos';
 export const IPC_DELETE_LECTURE_PHOTO = 'delete-lecture-photo';
 export const IPC_GET_LECTURE_PHOTO = 'get-lecture-photo';
 
+// One-click "everything" backup of the whole library folder to a single zip.
+export const IPC_EXPORT_LIBRARY_BACKUP = 'export-library-backup';
+
 // Live detection of a spoken task/homework announcement (see
 // assignments/assignmentDetector.ts) - pushed as it happens during
 // recording, plus a way to copy one (text + slide image) to the clipboard.
@@ -126,6 +129,7 @@ export const IPC_GENERATE_FLASHCARDS = 'generate-flashcards';
 export const IPC_LOAD_FLASHCARDS = 'load-flashcards';
 export const IPC_REVIEW_FLASHCARD = 'review-flashcard';
 export const IPC_LIST_DUE_FLASHCARDS = 'list-due-flashcards';
+export const IPC_GET_STUDY_STREAK = 'get-study-streak';
 
 // Exporting a rendered note to a file (PDF, or a Word-openable .doc).
 export const IPC_EXPORT_NOTE = 'export-note';

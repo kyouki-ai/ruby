@@ -68,6 +68,15 @@
           <span id="status-text" data-i18n="status.disconnected"></span>
         </div>
         <div id="api-key-banner" class="api-banner" style="display:none" data-i18n="status.needsApiKey"></div>
+        <div class="search-popover-wrap">
+          <button id="search-toggle-btn" class="icon-btn-lg" data-i18n-title="topbar.searchTitle"></button>
+          <div class="search-popover" id="search-popover" style="display:none">
+            <div class="search-box">
+              <span id="search-icon"></span>
+              <input id="search-input" type="search" data-i18n-placeholder="library.searchPlaceholder" />
+            </div>
+          </div>
+        </div>
         <button id="help-btn" class="icon-btn-lg" data-i18n-title="topbar.helpTitle"></button>
         <button id="settings-btn" class="icon-btn-lg" data-i18n-title="topbar.settingsTitle"></button>
         <button id="theme-toggle-btn" class="icon-btn-lg" data-i18n-title="topbar.themeTitle"></button>
@@ -162,12 +171,9 @@
           <button id="lib-back-btn" class="icon-btn-lg" style="display:none"></button>
           <h1 id="lib-title" data-i18n="library.title"></h1>
           <button id="lib-chat-btn" class="ghost-btn" style="display:none"></button>
+          <button id="lib-export-btn" class="ghost-btn" style="display:none"></button>
           <button id="lib-review-btn" class="ghost-btn" style="display:none"></button>
           <div class="toolbar-spacer"></div>
-          <div class="search-box">
-            <span id="search-icon"></span>
-            <input id="search-input" type="search" data-i18n-placeholder="library.searchPlaceholder" />
-          </div>
         </div>
         <div id="library-content" class="library-content"></div>
       </section>
@@ -248,6 +254,8 @@
               <button id="choose-folder-btn" type="button" class="secondary-btn" data-i18n="common.change"></button>
               <button id="reveal-folder-btn" type="button" class="secondary-btn" data-i18n="settings.storage.openFolder"></button>
             </div>
+            <button id="backup-library-btn" type="button" class="secondary-btn" style="margin-top:8px" data-i18n="settings.storage.backup"></button>
+            <span id="backup-status" class="hint"></span>
           </fieldset>
 
           <fieldset>
@@ -306,6 +314,13 @@
         <label>
           <span data-i18n="calendar.field.title"></span>
           <input id="schedule-title-input" type="text" required />
+        </label>
+
+        <label>
+          <span data-i18n="calendar.field.subject"></span>
+          <select id="schedule-subject-select">
+            <option value="" data-i18n="calendar.field.subjectNone"></option>
+          </select>
         </label>
 
         <label>
