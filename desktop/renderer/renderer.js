@@ -1297,6 +1297,7 @@ async function openNote(subject, lecture, backTo) {
 
   const exportBtn = wrapper.querySelector('#note-export-btn');
   exportBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     openMenu(e.currentTarget, [
       { label: t('note.exportPdf'), icon: 'download', onClick: () => runExport('pdf') },
       { label: t('note.exportDoc'), icon: 'download', onClick: () => runExport('doc') },
