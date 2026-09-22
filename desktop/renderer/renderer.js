@@ -364,11 +364,12 @@ document.getElementById('open-extension-folder-btn').addEventListener('click', (
 // tab of its own, so there's nothing for it to navigate back to. ---
 function switchToTab(tabName) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${tabName}`));
-  // The chat/library toggle only reflects those two modes - the recording
-  // screen is reached "on top" of whichever mode was active.
-  if (tabName === 'chat' || tabName === 'history') {
+  // The chat/library/calendar toggle only reflects those three modes - the
+  // recording screen is reached "on top" of whichever mode was active.
+  if (tabName === 'chat' || tabName === 'history' || tabName === 'calendar') {
     document.getElementById('mode-chat-btn').classList.toggle('active', tabName === 'chat');
     document.getElementById('mode-library-btn').classList.toggle('active', tabName === 'history');
+    document.getElementById('mode-calendar-btn').classList.toggle('active', tabName === 'calendar');
   }
 }
 
@@ -379,6 +380,10 @@ document.getElementById('mode-chat-btn').addEventListener('click', () => {
 document.getElementById('mode-library-btn').addEventListener('click', () => {
   switchToTab('history');
   openSubjectGrid();
+});
+document.getElementById('mode-calendar-btn').addEventListener('click', () => {
+  switchToTab('calendar');
+  openCalendar();
 });
 
 document.getElementById('settings-btn').innerHTML = icon('gear', 17);
@@ -1470,8 +1475,14 @@ async function renderSearchResults() {
       })
     );
   }
+  const groupNamesBySubject = new Map(); // subject -> Map(groupId -> name)
   for (const lecture of lectures) {
-    grid.appendChild(lectureCard(lecture, lecture.subject, () => openNote(lecture.subject, lecture, 'search'), true));
+    if (lecture.groupId && !groupNamesBySubject.has(lecture.subject)) {
+      const meta = await window.lectureApp.getSubjectMeta(lecture.subject);
+      groupNamesBySubject.set(lecture.subject, new Map(meta.groups.map((g) => [g.id, g.name])));
+    }
+    const groupName = lecture.groupId ? groupNamesBySubject.get(lecture.subject)?.get(lecture.groupId) ?? null : null;
+    grid.appendChild(lectureCard(lecture, lecture.subject, () => openNote(lecture.subject, lecture, 'search'), true, groupName));
   }
   setContent(grid);
 }
@@ -1516,15 +1527,16 @@ function subjectCard(subject, lectureCount, onClick, { onRename, onDelete }) {
   return card;
 }
 
-function lectureCard(lecture, subject, onClick, showSubjectTag = false) {
+function lectureCard(lecture, subject, onClick, showSubjectTag = false, groupName = null) {
   const date = new Date(lecture.date).toLocaleDateString(getLang() === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short' });
   const card = document.createElement('div');
   card.className = 'card';
+  const tagText = showSubjectTag ? [subject, groupName].filter(Boolean).join(' · ') : '';
   card.innerHTML = `
     <div class="card-tile" style="background:var(--bg-active); color:var(--text-muted)">${icon('file', 18)}</div>
     <button class="card-menu-btn">${icon('more', 16)}</button>
     <div class="card-title">${escapeHtml(lecture.title)}</div>
-    ${showSubjectTag ? `<div class="search-tag">${escapeHtml(subject)}</div>` : ''}
+    ${tagText ? `<div class="search-tag">${escapeHtml(tagText)}</div>` : ''}
     <div class="card-meta">${date} · ${Math.round(lecture.durationSec / 60)} ${getLang() === 'en' ? 'min' : 'мин'}</div>
   `;
   card.addEventListener('click', () => onClick());
@@ -2003,6 +2015,166 @@ settingsForm.addEventListener('submit', async (e) => {
   settingsSaved.textContent = t('settings.savedHint');
   settingsSaved.className = 'hint success';
   setTimeout(() => (settingsSaved.textContent = ''), 4000);
+});
+
+// --- Calendar: a weekly class timetable (plus one-off events), stored
+// once per library rather than per subject - see scheduleStore.ts. ---
+function mondayFirstDayIndex(date) {
+  return (date.getDay() + 6) % 7;
+}
+
+async function openCalendar() {
+  const entries = await window.lectureApp.listSchedule();
+  const content = document.getElementById('calendar-content');
+  content.innerHTML = '';
+
+  const todayIdx = mondayFirstDayIndex(new Date());
+  for (let day = 0; day < 7; day++) {
+    const dayEntries = entries
+      .filter((e) => e.type === 'weekly' && e.dayOfWeek === day)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+    const section = document.createElement('div');
+    section.className = 'calendar-day-section';
+    const title = document.createElement('div');
+    title.className = 'calendar-day-title';
+    title.textContent = t(`calendar.day.${day}`) + (day === todayIdx ? ` · ${t('common.today')}` : '');
+    section.appendChild(title);
+
+    if (dayEntries.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'calendar-day-empty';
+      empty.textContent = t('calendar.empty');
+      section.appendChild(empty);
+    } else {
+      for (const entry of dayEntries) section.appendChild(calendarEntryRow(entry));
+    }
+    content.appendChild(section);
+  }
+
+  const onceEntries = entries
+    .filter((e) => e.type === 'once')
+    .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
+  if (onceEntries.length > 0) {
+    const section = document.createElement('div');
+    section.className = 'calendar-day-section';
+    const title = document.createElement('div');
+    title.className = 'calendar-day-title';
+    title.textContent = t('calendar.upcoming');
+    section.appendChild(title);
+    for (const entry of onceEntries) section.appendChild(calendarEntryRow(entry, true));
+    content.appendChild(section);
+  }
+}
+
+function calendarEntryRow(entry, showDate = false) {
+  const row = document.createElement('div');
+  row.className = 'calendar-entry';
+  const dateLabel = showDate && entry.date ? new Date(entry.date).toLocaleDateString(getLang() === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short' }) + ' · ' : '';
+  const metaParts = [entry.location, entry.teacher].filter(Boolean);
+  row.innerHTML = `
+    <div class="calendar-entry-time">${escapeHtml(dateLabel)}${escapeHtml(entry.startTime)}${entry.endTime ? '–' + escapeHtml(entry.endTime) : ''}</div>
+    <div class="calendar-entry-body">
+      <div class="calendar-entry-title">${escapeHtml(entry.title)}</div>
+      ${metaParts.length ? `<div class="calendar-entry-meta">${escapeHtml(metaParts.join(' · '))}</div>` : ''}
+    </div>
+    <button class="calendar-entry-menu-btn">${icon('more', 15)}</button>
+  `;
+  row.addEventListener('click', () => openScheduleModal(entry));
+  row.querySelector('.calendar-entry-menu-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMenu(e.currentTarget, [
+      { label: t('note.edit'), icon: 'pencil', onClick: () => openScheduleModal(entry) },
+      {
+        label: t('library.delete'),
+        icon: 'trash',
+        danger: true,
+        onClick: async () => {
+          const ok = await askConfirm(t('calendar.deleteTitle'), t('calendar.deleteMsg', { name: entry.title }));
+          if (!ok) return;
+          await window.lectureApp.deleteScheduleEntry(entry.id);
+          openCalendar();
+        },
+      },
+    ]);
+  });
+  return row;
+}
+
+document.getElementById('calendar-add-btn').innerHTML = `${icon('plus', 16)}<span>${escapeHtml(t('calendar.add'))}</span>`;
+document.getElementById('schedule-modal-close-btn').innerHTML = icon('winClose', 15);
+
+const scheduleModalOverlay = document.getElementById('schedule-modal-overlay');
+const scheduleForm = document.getElementById('schedule-form');
+const scheduleDayRow = document.getElementById('schedule-day-row');
+const scheduleDateRow = document.getElementById('schedule-date-row');
+const scheduleDeleteBtn = document.getElementById('schedule-delete-btn');
+let editingScheduleId = null;
+
+function updateScheduleTypeRows() {
+  const type = scheduleForm.querySelector('input[name="schedule-type"]:checked').value;
+  scheduleDayRow.style.display = type === 'weekly' ? '' : 'none';
+  scheduleDateRow.style.display = type === 'once' ? '' : 'none';
+}
+scheduleForm.querySelectorAll('input[name="schedule-type"]').forEach((el) => el.addEventListener('change', updateScheduleTypeRows));
+
+function openScheduleModal(entry) {
+  editingScheduleId = entry ? entry.id : null;
+  document.getElementById('schedule-modal-title').textContent = t(entry ? 'calendar.editTitle' : 'calendar.addTitle');
+  scheduleDeleteBtn.style.display = entry ? '' : 'none';
+
+  document.getElementById('schedule-title-input').value = entry ? entry.title : '';
+  const type = entry ? entry.type : 'weekly';
+  scheduleForm.querySelector(`input[name="schedule-type"][value="${type}"]`).checked = true;
+  document.getElementById('schedule-day-select').value = String(entry ? entry.dayOfWeek ?? 0 : mondayFirstDayIndex(new Date()));
+  document.getElementById('schedule-date-input').value = entry?.date || new Date().toISOString().slice(0, 10);
+  document.getElementById('schedule-start-input').value = entry ? entry.startTime : '';
+  document.getElementById('schedule-end-input').value = entry ? entry.endTime || '' : '';
+  document.getElementById('schedule-location-input').value = entry?.location || '';
+  document.getElementById('schedule-teacher-input').value = entry?.teacher || '';
+  document.getElementById('schedule-notify-select').value = String(entry ? entry.notifyMinutesBefore : 10);
+  updateScheduleTypeRows();
+
+  scheduleModalOverlay.style.display = 'flex';
+}
+function closeScheduleModal() {
+  scheduleModalOverlay.style.display = 'none';
+}
+
+document.getElementById('calendar-add-btn').addEventListener('click', () => openScheduleModal(null));
+document.getElementById('schedule-modal-close-btn').addEventListener('click', closeScheduleModal);
+scheduleModalOverlay.addEventListener('click', (e) => {
+  if (e.target === scheduleModalOverlay) closeScheduleModal();
+});
+
+scheduleDeleteBtn.addEventListener('click', async () => {
+  const title = document.getElementById('schedule-title-input').value.trim();
+  const ok = await askConfirm(t('calendar.deleteTitle'), t('calendar.deleteMsg', { name: title }));
+  if (!ok) return;
+  await window.lectureApp.deleteScheduleEntry(editingScheduleId);
+  closeScheduleModal();
+  openCalendar();
+});
+
+scheduleForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const type = scheduleForm.querySelector('input[name="schedule-type"]:checked').value;
+  const entry = {
+    id: editingScheduleId || undefined,
+    title: document.getElementById('schedule-title-input').value.trim(),
+    type,
+    dayOfWeek: type === 'weekly' ? Number(document.getElementById('schedule-day-select').value) : undefined,
+    date: type === 'once' ? document.getElementById('schedule-date-input').value : undefined,
+    startTime: document.getElementById('schedule-start-input').value,
+    endTime: document.getElementById('schedule-end-input').value || undefined,
+    location: document.getElementById('schedule-location-input').value.trim() || undefined,
+    teacher: document.getElementById('schedule-teacher-input').value.trim() || undefined,
+    notifyMinutesBefore: Number(document.getElementById('schedule-notify-select').value),
+  };
+  if (!entry.title || !entry.startTime) return;
+  await window.lectureApp.saveScheduleEntry(entry);
+  closeScheduleModal();
+  openCalendar();
 });
 
 // --- Onboarding: a short branded welcome plays on every launch, then either

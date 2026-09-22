@@ -6,6 +6,7 @@ import type { ChatThread, ChatThreadMeta } from './storage/chatStore';
 import type { AssignmentEntry } from './assignments/assignmentDetector';
 import type { NotesDetailLevel } from './gemini/notesBuilder';
 import type { Flashcard, ReviewRating, DueDeckSummary } from './storage/flashcardStore';
+import type { ScheduleEntry } from './storage/scheduleStore';
 
 // Everything the renderer is allowed to touch. No direct Node/Electron
 // access is exposed - only this narrow, typed surface.
@@ -126,6 +127,11 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_REORDER_LECTURE_GROUPS, subject, orderedGroupIds),
   setLecturePosition: (subject: string, folderName: string, groupId: string | null, order: number): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_SET_LECTURE_POSITION, subject, folderName, groupId, order),
+
+  listSchedule: (): Promise<ScheduleEntry[]> => ipcRenderer.invoke(channels.IPC_LIST_SCHEDULE),
+  saveScheduleEntry: (entry: Omit<ScheduleEntry, 'id'> & { id?: string }): Promise<ScheduleEntry> =>
+    ipcRenderer.invoke(channels.IPC_SAVE_SCHEDULE_ENTRY, entry),
+  deleteScheduleEntry: (id: string): Promise<void> => ipcRenderer.invoke(channels.IPC_DELETE_SCHEDULE_ENTRY, id),
 
   setCurrentSubject: (subject: string): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_SET_CURRENT_SUBJECT, subject),

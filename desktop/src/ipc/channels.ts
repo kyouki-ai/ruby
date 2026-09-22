@@ -87,6 +87,12 @@ export const IPC_DELETE_LECTURE_GROUP = 'delete-lecture-group';
 export const IPC_REORDER_LECTURE_GROUPS = 'reorder-lecture-groups';
 export const IPC_SET_LECTURE_POSITION = 'set-lecture-position';
 
+// Weekly/one-off class schedule with desktop notifications (see
+// storage/scheduleStore.ts and schedule/scheduleNotifier.ts).
+export const IPC_LIST_SCHEDULE = 'list-schedule';
+export const IPC_SAVE_SCHEDULE_ENTRY = 'save-schedule-entry';
+export const IPC_DELETE_SCHEDULE_ENTRY = 'delete-schedule-entry';
+
 // Live detection of a spoken task/homework announcement (see
 // assignments/assignmentDetector.ts) - pushed as it happens during
 // recording, plus a way to copy one (text + slide image) to the clipboard.

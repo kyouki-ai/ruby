@@ -57,6 +57,7 @@
       <nav class="mode-switch">
         <button class="mode-switch-btn active" id="mode-chat-btn" data-mode="chat" data-i18n="nav.chat"></button>
         <button class="mode-switch-btn" id="mode-library-btn" data-mode="history" data-i18n="nav.library"></button>
+        <button class="mode-switch-btn" id="mode-calendar-btn" data-mode="calendar" data-i18n="nav.calendar"></button>
       </nav>
 
       <div class="topbar-spacer"></div>
@@ -171,6 +172,15 @@
         <div id="library-content" class="library-content"></div>
       </section>
 
+      <section id="tab-calendar" class="tab-panel">
+        <div class="library-toolbar">
+          <h1 data-i18n="calendar.title"></h1>
+          <div class="toolbar-spacer"></div>
+          <button id="calendar-add-btn" class="ghost-btn"></button>
+        </div>
+        <div id="calendar-content" class="calendar-content"></div>
+      </section>
+
       <section id="tab-chat" class="tab-panel active">
         <div class="library-toolbar">
           <button id="chat-back-btn" class="icon-btn-lg"></button>
@@ -283,6 +293,86 @@
           <span id="settings-saved" class="hint"></span>
         </form>
       </div>
+    </div>
+  </div>
+
+  <div id="schedule-modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal-box modal-box-wide schedule-modal-box">
+      <div class="modal-box-head">
+        <h3 id="schedule-modal-title" data-i18n="calendar.addTitle"></h3>
+        <button id="schedule-modal-close-btn" class="icon-btn-lg"></button>
+      </div>
+      <form id="schedule-form" class="settings-form">
+        <label>
+          <span data-i18n="calendar.field.title"></span>
+          <input id="schedule-title-input" type="text" required />
+        </label>
+
+        <fieldset>
+          <legend data-i18n="calendar.field.type"></legend>
+          <label class="radio-label">
+            <input type="radio" name="schedule-type" value="weekly" checked />
+            <span data-i18n="calendar.type.weekly"></span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="schedule-type" value="once" />
+            <span data-i18n="calendar.type.once"></span>
+          </label>
+
+          <label id="schedule-day-row">
+            <span data-i18n="calendar.field.day"></span>
+            <select id="schedule-day-select">
+              <option value="0" data-i18n="calendar.day.0"></option>
+              <option value="1" data-i18n="calendar.day.1"></option>
+              <option value="2" data-i18n="calendar.day.2"></option>
+              <option value="3" data-i18n="calendar.day.3"></option>
+              <option value="4" data-i18n="calendar.day.4"></option>
+              <option value="5" data-i18n="calendar.day.5"></option>
+              <option value="6" data-i18n="calendar.day.6"></option>
+            </select>
+          </label>
+          <label id="schedule-date-row" style="display:none">
+            <span data-i18n="calendar.field.date"></span>
+            <input id="schedule-date-input" type="date" />
+          </label>
+        </fieldset>
+
+        <div class="schedule-time-row">
+          <label>
+            <span data-i18n="calendar.field.start"></span>
+            <input id="schedule-start-input" type="time" required />
+          </label>
+          <label>
+            <span data-i18n="calendar.field.end"></span>
+            <input id="schedule-end-input" type="time" />
+          </label>
+        </div>
+
+        <label>
+          <span data-i18n="calendar.field.location"></span>
+          <input id="schedule-location-input" type="text" data-i18n-placeholder="calendar.field.locationPlaceholder" />
+        </label>
+        <label>
+          <span data-i18n="calendar.field.teacher"></span>
+          <input id="schedule-teacher-input" type="text" data-i18n-placeholder="calendar.field.teacherPlaceholder" />
+        </label>
+        <label>
+          <span data-i18n="calendar.field.notify"></span>
+          <select id="schedule-notify-select">
+            <option value="0" data-i18n="calendar.notify.0"></option>
+            <option value="5" data-i18n="calendar.notify.5"></option>
+            <option value="10" selected data-i18n="calendar.notify.10"></option>
+            <option value="15" data-i18n="calendar.notify.15"></option>
+            <option value="30" data-i18n="calendar.notify.30"></option>
+            <option value="60" data-i18n="calendar.notify.60"></option>
+          </select>
+        </label>
+
+        <div class="modal-actions">
+          <button type="button" id="schedule-delete-btn" class="ghost-btn" style="display:none; color:var(--danger)" data-i18n="library.delete"></button>
+          <button type="submit" class="primary-btn" data-i18n="common.save"></button>
+        </div>
+      </form>
     </div>
   </div>
 

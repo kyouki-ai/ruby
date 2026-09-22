@@ -50,6 +50,8 @@ import { setGroqApiKey, isGroqConfigured } from './groq/groqClient';
 import { saveApiKey, loadApiKeys, clearApiKey, saveGroqApiKey, loadGroqApiKey, clearGroqApiKey } from './secrets';
 import * as library from './storage/libraryStore';
 import * as chatStore from './storage/chatStore';
+import * as schedule from './storage/scheduleStore';
+import { startScheduleNotifier } from './schedule/scheduleNotifier';
 import { loadSettings, saveSettings, AppSettings } from './config';
 import * as channels from './ipc/channels';
 import { logError } from './logger';
@@ -690,6 +692,14 @@ function setupIpcHandlers(): void {
     (_e, subject: string, folderName: string, groupId: string | null, order: number) =>
       library.setLecturePosition(settings.libraryPath, subject, folderName, groupId, order)
   );
+
+  ipcMain.handle(channels.IPC_LIST_SCHEDULE, () => schedule.listSchedule(settings.libraryPath));
+  ipcMain.handle(channels.IPC_SAVE_SCHEDULE_ENTRY, (_e, entry: Omit<schedule.ScheduleEntry, 'id'> & { id?: string }) =>
+    schedule.saveScheduleEntry(settings.libraryPath, entry)
+  );
+  ipcMain.handle(channels.IPC_DELETE_SCHEDULE_ENTRY, (_e, id: string) =>
+    schedule.deleteScheduleEntry(settings.libraryPath, id)
+  );
   ipcMain.handle(channels.IPC_SAVE_LECTURE_MARKDOWN, (_e, subject: string, folderName: string, markdown: string) =>
     library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown)
   );
@@ -863,6 +873,14 @@ app.whenReady().then(() => {
   setupWsServer();
 
   globalShortcut.register(settings.toggleHotkey, toggleWindow);
+
+  startScheduleNotifier(
+    () => schedule.listSchedule(settings.libraryPath),
+    () => {
+      mainWindow?.show();
+      mainWindow?.focus();
+    }
+  );
 });
 
 app.on('window-all-closed', () => {
