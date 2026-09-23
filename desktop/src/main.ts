@@ -48,8 +48,8 @@ import * as flashcards from './storage/flashcardStore';
 import { detectAssignmentPhrase, AssignmentEntry } from './assignments/assignmentDetector';
 import { setApiKeys, isApiKeyConfigured } from './gemini/geminiClient';
 import { streamChatReply } from './ai/chatReply';
-import { setGroqApiKey, isGroqConfigured } from './groq/groqClient';
-import { saveApiKey, loadApiKeys, clearApiKey, saveGroqApiKey, loadGroqApiKey, clearGroqApiKey } from './secrets';
+import { setGroqApiKeys, isGroqConfigured } from './groq/groqClient';
+import { saveApiKey, loadApiKeys, clearApiKey, saveGroqApiKey, loadGroqApiKeys, clearGroqApiKey } from './secrets';
 import * as library from './storage/libraryStore';
 import * as chatStore from './storage/chatStore';
 import * as schedule from './storage/scheduleStore';
@@ -672,12 +672,12 @@ function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_GET_GROQ_API_STATUS, () => ({ configured: isGroqConfigured() }));
   ipcMain.handle(channels.IPC_SAVE_GROQ_API_KEY, (_e, key: string) => {
     saveGroqApiKey(key);
-    setGroqApiKey(loadGroqApiKey());
+    setGroqApiKeys(loadGroqApiKeys());
     return { configured: isGroqConfigured() };
   });
   ipcMain.handle(channels.IPC_CLEAR_GROQ_API_KEY, () => {
     clearGroqApiKey();
-    setGroqApiKey(null);
+    setGroqApiKeys([]);
     return { configured: isGroqConfigured() };
   });
 
@@ -988,7 +988,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
 
   setApiKeys(loadApiKeys());
-  setGroqApiKey(loadGroqApiKey());
+  setGroqApiKeys(loadGroqApiKeys());
   try {
     syncExtensionToStablePath();
   } catch (err) {

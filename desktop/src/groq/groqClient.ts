@@ -13,7 +13,13 @@ const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODELS_URL = 'https://api.groq.com/openai/v1/models';
 
-let groqApiKey: string | null = null;
+// Each user pastes in their own free Groq key via the Settings tab (see
+// secrets.ts - stored encrypted). More than one key (comma/newline-separated
+// in that same field) round-robins here - useful once someone hits Groq's
+// free-tier tokens-per-minute limit and has a second free account, same
+// pattern as geminiClient.ts's multi-key support.
+let apiKeys: string[] = [];
+let nextKeyIndex = 0;
 // Two different guessed model names ("llama-3.3-70b-versatile", then
 // "llama-3.1-8b-instant") both 404'd with "does not exist or you do not have
 // access to it" on the same key - guessing a third name isn't worth trying
@@ -21,20 +27,36 @@ let groqApiKey: string | null = null;
 // account can actually use, once per key, and go with that.
 let cachedTextModel: string | null = null;
 
-export function setGroqApiKey(key: string | null): void {
-  groqApiKey = key && key.trim() ? key.trim() : null;
+export function setGroqApiKeys(keys: string[]): void {
+  apiKeys = keys.filter(Boolean);
+  nextKeyIndex = 0;
   cachedTextModel = null;
 }
 
 export function isGroqConfigured(): boolean {
-  return groqApiKey !== null;
+  return apiKeys.length > 0;
 }
+
+function keyPool(): string[] {
+  if (apiKeys.length === 0) throw new Error('Groq API key is not set.');
+  return apiKeys;
+}
+
+/** Rotates through the configured key(s) - a fresh pick each call, including retries. */
+function nextKey(): string {
+  const pool = keyPool();
+  const key = pool[nextKeyIndex % pool.length];
+  nextKeyIndex++;
+  return key;
+}
+
+const RETRYABLE_STATUS = new Set([429, 503]);
 
 async function resolveTextModel(): Promise<string> {
   if (cachedTextModel) return cachedTextModel;
-  if (!groqApiKey) throw new Error('Groq API key is not set.');
+  const apiKey = nextKey();
 
-  const response = await fetch(GROQ_MODELS_URL, { headers: { Authorization: `Bearer ${groqApiKey}` } });
+  const response = await fetch(GROQ_MODELS_URL, { headers: { Authorization: `Bearer ${apiKey}` } });
   if (!response.ok) {
     throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
   }
@@ -55,46 +77,58 @@ async function resolveTextModel(): Promise<string> {
   return preferred;
 }
 
-export async function transcribeWithGroq(wavBuffer: Buffer): Promise<string> {
-  if (!groqApiKey) throw new Error('Groq API key is not set.');
-
-  const form = new FormData();
-  form.append('file', new Blob([Uint8Array.from(wavBuffer)], { type: 'audio/wav' }), 'audio.wav');
-  form.append('model', 'whisper-large-v3-turbo');
-  form.append('response_format', 'text');
-
-  const response = await fetch(GROQ_TRANSCRIBE_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${groqApiKey}` },
-    body: form,
-    signal: AbortSignal.timeout(20_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
-  }
-  return (await response.text()).trim();
-}
-
 /** Groq's 429 body includes its own "Please try again in 21.9s" hint - use it instead of a blind guess. */
 function parseRetryDelayMs(errorText: string): number {
   const match = errorText.match(/try again in ([\d.]+)\s*s/i);
   return match ? Math.ceil(parseFloat(match[1]) * 1000) + 500 : 5000;
 }
 
+export async function transcribeWithGroq(wavBuffer: Buffer): Promise<string> {
+  const pool = keyPool();
+  const maxAttempts = Math.max(2, pool.length);
+  let lastError: Error = new Error('Groq request failed');
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const apiKey = nextKey();
+    const form = new FormData();
+    form.append('file', new Blob([Uint8Array.from(wavBuffer)], { type: 'audio/wav' }), 'audio.wav');
+    form.append('model', 'whisper-large-v3-turbo');
+    form.append('response_format', 'text');
+
+    const response = await fetch(GROQ_TRANSCRIBE_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (response.ok) return (await response.text()).trim();
+
+    const errorText = await response.text();
+    lastError = new Error(`Groq request failed: ${response.status} ${errorText}`);
+    if (!RETRYABLE_STATUS.has(response.status) || attempt === maxAttempts) break;
+    // A second key is a different account's quota - worth trying right away.
+    // With only one key, the same account needs the hinted cooldown first.
+    if (pool.length === 1) await new Promise((resolve) => setTimeout(resolve, parseRetryDelayMs(errorText)));
+  }
+
+  throw lastError;
+}
+
 /**
- * Groq's free tier limits tokens-per-minute, not just requests-per-day - a
- * single large conspect rebuild can trip it on its own. That resets within
- * seconds (the error names the exact wait), unlike Gemini's daily quota, so
- * one retry after the hinted delay is worth doing automatically instead of
- * making the user click the button again.
+ * Groq's free tier limits tokens-per-minute per account, not just
+ * requests-per-day - a single large conspect rebuild can trip it on its own.
+ * A second configured key (a different free account) gets tried immediately
+ * on a 429 instead of waiting; with only one key, this waits out Groq's own
+ * hinted cooldown before retrying, same as before multi-key support existed.
  */
 async function postChatCompletion(
   body: Record<string, unknown>,
   timeoutMs: number,
   externalSignal?: AbortSignal
 ): Promise<Response> {
-  if (!groqApiKey) throw new Error('Groq API key is not set.');
+  const pool = keyPool();
+  const maxAttempts = Math.max(2, pool.length);
   // A separate internal controller, same reasoning as geminiClient's
   // streamGemini - the timeout and an explicit "stop" both need to abort the
   // same fetch, but only the latter should be treated as a quiet, expected
@@ -105,21 +139,24 @@ async function postChatCompletion(
   externalSignal?.addEventListener('abort', forwardAbort);
 
   try {
-    const send = () =>
-      fetch(GROQ_CHAT_URL, {
+    let response: Response | null = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (controller.signal.aborted) break;
+      const apiKey = nextKey();
+      response = await fetch(GROQ_CHAT_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
 
-    let response = await send();
-    if (response.status === 429 && !controller.signal.aborted) {
-      const delayMs = parseRetryDelayMs(await response.text());
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      if (!controller.signal.aborted) response = await send();
+      if (response.status !== 429 || attempt === maxAttempts) break;
+      if (pool.length === 1) {
+        const delayMs = parseRetryDelayMs(await response.clone().text());
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
-    return response;
+    return response!;
   } finally {
     clearTimeout(timeoutId);
     externalSignal?.removeEventListener('abort', forwardAbort);

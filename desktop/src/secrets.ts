@@ -53,30 +53,38 @@ export function clearApiKey(): void {
 }
 
 /**
- * Groq's free Whisper API is optional - only used for audio transcription
- * (the highest-volume Gemini call) when configured, so a lecture's speech
- * doesn't have to share Gemini's tight free-tier daily quota with notes
- * building, chat and the quiz feature. A single key, same encrypted-at-rest
- * treatment as the Gemini key.
+ * Groq's free Whisper/Llama API is optional - only used for audio
+ * transcription and (once configured) notes/chat/quiz too, so a lecture's
+ * speech doesn't have to share Gemini's tight free-tier daily quota. Same
+ * encrypted-at-rest treatment and the same comma/newline-separated multi-key
+ * round-robin as the Gemini key above - Groq's free tier rate-limits tokens
+ * per minute per account, so a second free key (a different Groq account)
+ * gives the app a fresh quota to fall back to instead of failing outright.
  */
 function groqKeyFilePath(): string {
   return path.join(app.getPath('userData'), 'groq-key.enc');
 }
 
 export function saveGroqApiKey(rawInput: string): void {
-  const key = rawInput.trim();
-  const encrypted = safeStorage.encryptString(key);
+  const keys = parseKeys(rawInput);
+  const encrypted = safeStorage.encryptString(JSON.stringify(keys));
   fs.mkdirSync(path.dirname(groqKeyFilePath()), { recursive: true });
   fs.writeFileSync(groqKeyFilePath(), encrypted);
 }
 
-export function loadGroqApiKey(): string | null {
+export function loadGroqApiKeys(): string[] {
   try {
     const encrypted = fs.readFileSync(groqKeyFilePath());
     const decrypted = safeStorage.decryptString(encrypted);
-    return decrypted || null;
+    try {
+      const parsed = JSON.parse(decrypted);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Pre-existing save from before multi-key support - a raw key string.
+    }
+    return decrypted ? [decrypted] : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
