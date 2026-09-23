@@ -1,6 +1,7 @@
 import { app, safeStorage } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import { logError } from './logger';
 
 /**
  * Stores the user's own Gemini API key(s) encrypted at rest via the OS
@@ -33,8 +34,13 @@ export function saveApiKey(rawInput: string): void {
 }
 
 export function loadApiKeys(): string[] {
+  let encrypted: Buffer;
   try {
-    const encrypted = fs.readFileSync(keyFilePath());
+    encrypted = fs.readFileSync(keyFilePath());
+  } catch {
+    return []; // Nothing saved yet - not an error.
+  }
+  try {
     const decrypted = safeStorage.decryptString(encrypted);
     try {
       const parsed = JSON.parse(decrypted);
@@ -43,7 +49,13 @@ export function loadApiKeys(): string[] {
       // Pre-existing save from before multi-key support - a raw key string.
     }
     return decrypted ? [decrypted] : [];
-  } catch {
+  } catch (err) {
+    // A saved key that fails to decrypt was previously treated exactly like
+    // "no key saved" with zero trace anywhere - genuinely indistinguishable
+    // from a first-time user, which made a real problem here (Windows
+    // DPAPI/credential issues, a userData dir moved to another machine, ...)
+    // look like the user simply never configured anything.
+    logError('Failed to decrypt saved Gemini API key(s) - treating as not configured', err);
     return [];
   }
 }
@@ -73,8 +85,13 @@ export function saveGroqApiKey(rawInput: string): void {
 }
 
 export function loadGroqApiKeys(): string[] {
+  let encrypted: Buffer;
   try {
-    const encrypted = fs.readFileSync(groqKeyFilePath());
+    encrypted = fs.readFileSync(groqKeyFilePath());
+  } catch {
+    return []; // Nothing saved yet - not an error.
+  }
+  try {
     const decrypted = safeStorage.decryptString(encrypted);
     try {
       const parsed = JSON.parse(decrypted);
@@ -83,11 +100,56 @@ export function loadGroqApiKeys(): string[] {
       // Pre-existing save from before multi-key support - a raw key string.
     }
     return decrypted ? [decrypted] : [];
-  } catch {
+  } catch (err) {
+    logError('Failed to decrypt saved Groq API key(s) - treating as not configured', err);
     return [];
   }
 }
 
 export function clearGroqApiKey(): void {
   fs.rm(groqKeyFilePath(), () => undefined);
+}
+
+/**
+ * Cloudflare Workers AI as a third, last-resort text provider - tried only
+ * once both Gemini and Groq have failed a given request (see notesBuilder.ts
+ * and chatReply.ts). Unlike Gemini/Groq this needs two pieces (an account ID
+ * plus an API token, both from the Cloudflare dashboard, no card required),
+ * so it's stored as one JSON object rather than a key list.
+ */
+function cloudflareCredsFilePath(): string {
+  return path.join(app.getPath('userData'), 'cloudflare-creds.enc');
+}
+
+export interface CloudflareCredentials {
+  accountId: string;
+  apiToken: string;
+}
+
+export function saveCloudflareCredentials(accountId: string, apiToken: string): void {
+  const creds: CloudflareCredentials = { accountId: accountId.trim(), apiToken: apiToken.trim() };
+  const encrypted = safeStorage.encryptString(JSON.stringify(creds));
+  fs.mkdirSync(path.dirname(cloudflareCredsFilePath()), { recursive: true });
+  fs.writeFileSync(cloudflareCredsFilePath(), encrypted);
+}
+
+export function loadCloudflareCredentials(): CloudflareCredentials | null {
+  let encrypted: Buffer;
+  try {
+    encrypted = fs.readFileSync(cloudflareCredsFilePath());
+  } catch {
+    return null; // Nothing saved yet - not an error.
+  }
+  try {
+    const decrypted = safeStorage.decryptString(encrypted);
+    const parsed = JSON.parse(decrypted) as CloudflareCredentials;
+    return parsed.accountId && parsed.apiToken ? parsed : null;
+  } catch (err) {
+    logError('Failed to decrypt saved Cloudflare credentials - treating as not configured', err);
+    return null;
+  }
+}
+
+export function clearCloudflareCredentials(): void {
+  fs.rm(cloudflareCredsFilePath(), () => undefined);
 }

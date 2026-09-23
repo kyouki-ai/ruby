@@ -49,7 +49,18 @@ import { detectAssignmentPhrase, AssignmentEntry } from './assignments/assignmen
 import { setApiKeys, isApiKeyConfigured } from './gemini/geminiClient';
 import { streamChatReply } from './ai/chatReply';
 import { setGroqApiKeys, isGroqConfigured } from './groq/groqClient';
-import { saveApiKey, loadApiKeys, clearApiKey, saveGroqApiKey, loadGroqApiKeys, clearGroqApiKey } from './secrets';
+import { setCloudflareCredentials, isCloudflareConfigured } from './cloudflare/cloudflareClient';
+import {
+  saveApiKey,
+  loadApiKeys,
+  clearApiKey,
+  saveGroqApiKey,
+  loadGroqApiKeys,
+  clearGroqApiKey,
+  saveCloudflareCredentials,
+  loadCloudflareCredentials,
+  clearCloudflareCredentials,
+} from './secrets';
 import * as library from './storage/libraryStore';
 import * as chatStore from './storage/chatStore';
 import * as schedule from './storage/scheduleStore';
@@ -681,6 +692,20 @@ function setupIpcHandlers(): void {
     return { configured: isGroqConfigured() };
   });
 
+  // Cloudflare Workers AI - optional third text provider, tried only once
+  // both Groq and Gemini have failed a request (see notesBuilder.ts/chatReply.ts).
+  ipcMain.handle(channels.IPC_GET_CLOUDFLARE_API_STATUS, () => ({ configured: isCloudflareConfigured() }));
+  ipcMain.handle(channels.IPC_SAVE_CLOUDFLARE_CREDENTIALS, (_e, accountId: string, apiToken: string) => {
+    saveCloudflareCredentials(accountId, apiToken);
+    setCloudflareCredentials(loadCloudflareCredentials());
+    return { configured: isCloudflareConfigured() };
+  });
+  ipcMain.handle(channels.IPC_CLEAR_CLOUDFLARE_CREDENTIALS, () => {
+    clearCloudflareCredentials();
+    setCloudflareCredentials(null);
+    return { configured: isCloudflareConfigured() };
+  });
+
   // Library: subjects and lectures, stored as plain folders on disk.
   ipcMain.handle(channels.IPC_LIST_SUBJECTS, () => library.listSubjects(settings.libraryPath));
   ipcMain.handle(channels.IPC_CREATE_SUBJECT, (_e, name: string) => library.createSubject(settings.libraryPath, name));
@@ -989,6 +1014,7 @@ app.whenReady().then(() => {
 
   setApiKeys(loadApiKeys());
   setGroqApiKeys(loadGroqApiKeys());
+  setCloudflareCredentials(loadCloudflareCredentials());
   try {
     syncExtensionToStablePath();
   } catch (err) {

@@ -1,8 +1,13 @@
-import { generateText, generateTextWithFinish } from './geminiClient';
+import { generateText, generateTextWithFinish, isApiKeyConfigured } from './geminiClient';
 import { generateTextWithGroq, generateTextWithGroqFinish, isGroqConfigured } from '../groq/groqClient';
+import {
+  generateTextWithCloudflare,
+  generateTextWithCloudflareFinish,
+  isCloudflareConfigured,
+} from '../cloudflare/cloudflareClient';
+import { tryProviders } from '../ai/providerChain';
 import { TranscriptSegment } from '../transcription/audioPipeline';
 import { SlideEntry } from '../slides/slidePipeline';
-import { logError } from '../logger';
 
 export type NotesDetailLevel = 'concise' | 'detailed';
 
@@ -22,28 +27,30 @@ const MAX_CONTINUATIONS = 5;
 const MAX_CONTINUATION_TAIL_CHARS = 6000;
 
 /**
- * Routes to Groq when the user configured a key (see groqClient.ts), else
- * Gemini as before. If Groq itself fails (rate limit exhausted across all
- * configured keys, a timeout, whatever), this falls back to Gemini for that
- * one request instead of failing outright - the user's Gemini key already
- * sits there unused while Groq is configured, so it's a free second provider
- * to lean on rather than making the user wait out Groq's cooldown or go
- * find a second Groq account.
+ * Tries Groq first (when configured, see groqClient.ts), then Gemini, then
+ * Cloudflare Workers AI (see cloudflareClient.ts) - each is a separate free
+ * account with its own independent quota, so a rate limit or outage on one
+ * doesn't fail the request as long as another is configured. Falls straight
+ * to whichever of these the user actually set up if not all three are.
  */
 function generateTextRouted(prompt: string, maxTokens?: number): Promise<string> {
-  if (!isGroqConfigured()) return generateText(prompt, maxTokens);
-  return generateTextWithGroq(prompt, maxTokens).catch((err) => {
-    logError('Groq text generation failed - falling back to Gemini for this request', err);
-    return generateText(prompt, maxTokens);
-  });
+  return tryProviders([
+    { name: 'Groq', configured: isGroqConfigured(), call: () => generateTextWithGroq(prompt, maxTokens) },
+    { name: 'Gemini', configured: isApiKeyConfigured(), call: () => generateText(prompt, maxTokens) },
+    { name: 'Cloudflare', configured: isCloudflareConfigured(), call: () => generateTextWithCloudflare(prompt, maxTokens) },
+  ]);
 }
 
 function generateTextRoutedWithFinish(prompt: string, maxTokens?: number): Promise<{ text: string; truncated: boolean }> {
-  if (!isGroqConfigured()) return generateTextWithFinish(prompt, maxTokens);
-  return generateTextWithGroqFinish(prompt, maxTokens).catch((err) => {
-    logError('Groq text generation failed - falling back to Gemini for this request', err);
-    return generateTextWithFinish(prompt, maxTokens);
-  });
+  return tryProviders([
+    { name: 'Groq', configured: isGroqConfigured(), call: () => generateTextWithGroqFinish(prompt, maxTokens) },
+    { name: 'Gemini', configured: isApiKeyConfigured(), call: () => generateTextWithFinish(prompt, maxTokens) },
+    {
+      name: 'Cloudflare',
+      configured: isCloudflareConfigured(),
+      call: () => generateTextWithCloudflareFinish(prompt, maxTokens),
+    },
+  ]);
 }
 
 /**

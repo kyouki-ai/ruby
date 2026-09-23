@@ -55,6 +55,9 @@ export const IPC_CLEAR_API_KEY = 'clear-api-key';
 export const IPC_GET_GROQ_API_STATUS = 'get-groq-api-status';
 export const IPC_SAVE_GROQ_API_KEY = 'save-groq-api-key';
 export const IPC_CLEAR_GROQ_API_KEY = 'clear-groq-api-key';
+export const IPC_GET_CLOUDFLARE_API_STATUS = 'get-cloudflare-api-status';
+export const IPC_SAVE_CLOUDFLARE_CREDENTIALS = 'save-cloudflare-credentials';
+export const IPC_CLEAR_CLOUDFLARE_CREDENTIALS = 'clear-cloudflare-credentials';
 
 // Library: subjects (folders) and lectures (sub-folders)
 export const IPC_LIST_SUBJECTS = 'list-subjects';

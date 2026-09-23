@@ -63,8 +63,18 @@ async function resolveTextModel(): Promise<string> {
   const data = (await response.json()) as { data?: { id: string }[] };
   const ids = (data.data ?? []).map((m) => m.id);
 
-  // Skip anything that isn't a text chat model (Whisper, TTS, moderation/guard models).
-  const candidates = ids.filter((id) => !/whisper|tts|guard|moderation|prompt-guard/i.test(id));
+  // Groq's /models catalog mixes real text chat models in with Whisper (STT),
+  // "canopylabs/orpheus-*" (TTS), and guard/moderation models, and it keeps
+  // changing - excluding known non-chat keywords already missed "orpheus"
+  // once in production: it silently became the last-resort candidates[0]
+  // pick and broke chat outright with a "requires terms acceptance" error,
+  // never even reaching the Gemini/Cloudflare fallback because the request
+  // itself was malformed for that model, not merely rate-limited. Allowlisting
+  // known chat model *families* instead is safer against catalog changes -
+  // an unrecognized family now fails resolveTextModel() loudly (which the
+  // fallback chain in notesBuilder.ts/chatReply.ts already handles) instead
+  // of silently sending real user requests to a broken model.
+  const candidates = ids.filter((id) => /(?:^|\/)(llama|gpt-oss|qwen|mixtral|gemma|deepseek)/i.test(id));
   const preferred =
     candidates.find((id) => /llama-3\.[13]-(70b|8b)/i.test(id)) ??
     candidates.find((id) => /llama/i.test(id)) ??

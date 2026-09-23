@@ -247,6 +247,18 @@
           </fieldset>
 
           <fieldset>
+            <legend data-i18n="settings.cloudflare.legend"></legend>
+            <p class="hint" data-i18n-html="settings.cloudflare.hint"></p>
+            <div class="api-key-row">
+              <input id="cloudflare-account-input" type="text" data-i18n-placeholder="settings.cloudflare.accountPlaceholder" />
+              <input id="cloudflare-token-input" type="password" data-i18n-placeholder="settings.cloudflare.tokenPlaceholder" />
+              <button id="save-cloudflare-btn" type="button" class="secondary-btn" data-i18n="common.save"></button>
+              <button id="clear-cloudflare-btn" type="button" class="ghost-btn" data-i18n="common.remove"></button>
+            </div>
+            <span id="cloudflare-status" class="hint"></span>
+          </fieldset>
+
+          <fieldset>
             <legend data-i18n="settings.storage.legend"></legend>
             <p class="hint" data-i18n="settings.storage.hint"></p>
             <div class="api-key-row">

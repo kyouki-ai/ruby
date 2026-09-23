@@ -90,6 +90,13 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_SAVE_GROQ_API_KEY, key),
   clearGroqApiKey: (): Promise<{ configured: boolean }> => ipcRenderer.invoke(channels.IPC_CLEAR_GROQ_API_KEY),
 
+  getCloudflareApiStatus: (): Promise<{ configured: boolean }> =>
+    ipcRenderer.invoke(channels.IPC_GET_CLOUDFLARE_API_STATUS),
+  saveCloudflareCredentials: (accountId: string, apiToken: string): Promise<{ configured: boolean }> =>
+    ipcRenderer.invoke(channels.IPC_SAVE_CLOUDFLARE_CREDENTIALS, accountId, apiToken),
+  clearCloudflareCredentials: (): Promise<{ configured: boolean }> =>
+    ipcRenderer.invoke(channels.IPC_CLEAR_CLOUDFLARE_CREDENTIALS),
+
   listSubjects: (): Promise<string[]> => ipcRenderer.invoke(channels.IPC_LIST_SUBJECTS),
   createSubject: (name: string): Promise<string> => ipcRenderer.invoke(channels.IPC_CREATE_SUBJECT, name),
   renameSubject: (oldName: string, newName: string): Promise<string> =>

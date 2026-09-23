@@ -2164,6 +2164,31 @@ document.getElementById('clear-groq-key-btn').addEventListener('click', async ()
   checkGroqApiStatus();
 });
 
+const cloudflareAccountInput = document.getElementById('cloudflare-account-input');
+const cloudflareTokenInput = document.getElementById('cloudflare-token-input');
+const cloudflareStatus = document.getElementById('cloudflare-status');
+
+async function checkCloudflareApiStatus() {
+  const { configured } = await window.lectureApp.getCloudflareApiStatus();
+  cloudflareStatus.textContent = configured ? t('settings.cloudflareConfigured') : t('settings.cloudflareMissing');
+  cloudflareStatus.className = configured ? 'hint success' : 'hint';
+}
+
+document.getElementById('save-cloudflare-btn').addEventListener('click', async () => {
+  const accountId = cloudflareAccountInput.value.trim();
+  const apiToken = cloudflareTokenInput.value.trim();
+  if (!accountId || !apiToken) return;
+  await window.lectureApp.saveCloudflareCredentials(accountId, apiToken);
+  cloudflareAccountInput.value = '';
+  cloudflareTokenInput.value = '';
+  checkCloudflareApiStatus();
+});
+
+document.getElementById('clear-cloudflare-btn').addEventListener('click', async () => {
+  await window.lectureApp.clearCloudflareCredentials();
+  checkCloudflareApiStatus();
+});
+
 document.getElementById('choose-folder-btn').addEventListener('click', async () => {
   const chosen = await window.lectureApp.chooseLibraryFolder();
   if (chosen) libraryPathInput.value = chosen;
@@ -2501,6 +2526,7 @@ function dismissOnboarding() {
 async function initOnboarding() {
   apiKeyAlreadyConfigured = await checkApiStatus();
   checkGroqApiStatus();
+  checkCloudflareApiStatus();
   if (apiKeyAlreadyConfigured) {
     // Nothing to set up and nothing to press - just a brief branded
     // flourish while the app itself finishes loading underneath, instead
