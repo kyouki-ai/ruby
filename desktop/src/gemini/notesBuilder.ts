@@ -13,6 +13,12 @@ export type NotesDetailLevel = 'concise' | 'detailed';
 // instead of just accepting a truncated document.
 const DETAILED_MAX_TOKENS = 8000;
 const MAX_CONTINUATIONS = 5;
+// The tail, not the whole accumulated document, is resent on each continuation
+// round - the model only needs to see where it left off to keep going. Without
+// this cap, round N's prompt embeds all of rounds 1..N-1's output on top of the
+// (already large) transcript, so the request itself can blow past the model's
+// context window well before MAX_CONTINUATIONS is reached.
+const MAX_CONTINUATION_TAIL_CHARS = 6000;
 
 /** Routes to Groq when the user configured a key (see groqClient.ts), else Gemini as before. */
 function generateTextRouted(prompt: string, maxTokens?: number): Promise<string> {
@@ -38,10 +44,12 @@ async function generateLongText(prompt: string, maxTokens: number): Promise<stri
     full += (full && text ? '\n' : '') + text;
     if (!truncated) break;
 
+    const tail = full.length > MAX_CONTINUATION_TAIL_CHARS ? full.slice(-MAX_CONTINUATION_TAIL_CHARS) : full;
     currentPrompt =
       `${prompt}\n\n` +
-      `You already wrote the following so far (do not repeat any of it, do not re-summarize it, just keep going ` +
-      `exactly from where it stops - if it ends mid-sentence, complete that sentence first):\n\n${full}`;
+      `You already wrote the notes up to this point (below is just the tail end of what you wrote so far, not the ` +
+      `whole thing - do not repeat any of it, just keep going exactly from where it stops; if it ends mid-sentence, ` +
+      `complete that sentence first):\n\n${tail}`;
   }
 
   return full;
@@ -62,19 +70,44 @@ export interface MarkedMoment {
   text: string;
 }
 
+// A long lecture's raw transcript (plus slide text) can outright exceed a
+// Groq model's context window on its own, before the prompt instructions or
+// requested output are even counted - Groq then rejects the request itself
+// with "Please reduce the length of the messages or completion" rather than
+// the usual 429 rate-limit. Same trade-off as capNotesForPrompt below: losing
+// some coverage on an unusually long lecture beats failing outright.
+const MAX_SOURCE_CHARS_FOR_NOTES = 45000;
+
+function capSourceText(transcriptText: string, slidesText: string): { transcriptText: string; slidesText: string } {
+  if (transcriptText.length + slidesText.length <= MAX_SOURCE_CHARS_FOR_NOTES) {
+    return { transcriptText, slidesText };
+  }
+  // Slide text is mostly redundant with what was said about it, so it gets the
+  // smaller share of the budget; the spoken transcript is the primary source.
+  const slidesBudget = Math.min(slidesText.length, Math.floor(MAX_SOURCE_CHARS_FOR_NOTES * 0.2));
+  const transcriptBudget = MAX_SOURCE_CHARS_FOR_NOTES - slidesBudget;
+  return {
+    transcriptText:
+      transcriptText.length > transcriptBudget
+        ? transcriptText.slice(0, transcriptBudget) + '\n…(транскрипт обрезан из-за ограничения модели)'
+        : transcriptText,
+    slidesText:
+      slidesText.length > slidesBudget
+        ? slidesText.slice(0, slidesBudget) + '\n…(слайды обрезаны из-за ограничения модели)'
+        : slidesText,
+  };
+}
+
 function buildPrompt(
   transcript: TranscriptSegment[],
   slides: SlideEntry[],
   markedMoments: MarkedMoment[] = [],
   detailLevel: NotesDetailLevel = 'concise'
 ): string {
-  const transcriptText = transcript
-    .map((seg) => `[${formatTimestamp(seg.startSec)}] ${seg.text}`)
-    .join('\n');
-
-  const slidesText = slides
-    .map((slide) => `[${formatTimestamp(slide.offsetSec)}] ${slide.content}`)
-    .join('\n\n');
+  const { transcriptText, slidesText } = capSourceText(
+    transcript.map((seg) => `[${formatTimestamp(seg.startSec)}] ${seg.text}`).join('\n'),
+    slides.map((slide) => `[${formatTimestamp(slide.offsetSec)}] ${slide.content}`).join('\n\n')
+  );
 
   const markedText = markedMoments
     .map((m) => `[${formatTimestamp(m.offsetSec)}] ${m.text}`)

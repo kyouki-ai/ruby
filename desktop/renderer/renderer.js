@@ -1560,7 +1560,9 @@ async function openNote(subject, lecture, backTo) {
           ? t('note.rebuildFailedOverload')
           : /429|rate.?limit/i.test(raw)
             ? t('note.rebuildFailedRateLimit')
-            : t('note.rebuildFailedGeneric', { error: raw });
+            : /reduce the length|context.?length|too many tokens/i.test(raw)
+              ? t('note.rebuildFailedTooLong')
+              : t('note.rebuildFailedGeneric', { error: raw });
         showAlert(t('note.rebuild'), message);
       }
     } finally {
