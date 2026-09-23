@@ -2,6 +2,7 @@ import { generateText, generateTextWithFinish } from './geminiClient';
 import { generateTextWithGroq, generateTextWithGroqFinish, isGroqConfigured } from '../groq/groqClient';
 import { TranscriptSegment } from '../transcription/audioPipeline';
 import { SlideEntry } from '../slides/slidePipeline';
+import { logError } from '../logger';
 
 export type NotesDetailLevel = 'concise' | 'detailed';
 
@@ -20,13 +21,29 @@ const MAX_CONTINUATIONS = 5;
 // context window well before MAX_CONTINUATIONS is reached.
 const MAX_CONTINUATION_TAIL_CHARS = 6000;
 
-/** Routes to Groq when the user configured a key (see groqClient.ts), else Gemini as before. */
+/**
+ * Routes to Groq when the user configured a key (see groqClient.ts), else
+ * Gemini as before. If Groq itself fails (rate limit exhausted across all
+ * configured keys, a timeout, whatever), this falls back to Gemini for that
+ * one request instead of failing outright - the user's Gemini key already
+ * sits there unused while Groq is configured, so it's a free second provider
+ * to lean on rather than making the user wait out Groq's cooldown or go
+ * find a second Groq account.
+ */
 function generateTextRouted(prompt: string, maxTokens?: number): Promise<string> {
-  return isGroqConfigured() ? generateTextWithGroq(prompt, maxTokens) : generateText(prompt, maxTokens);
+  if (!isGroqConfigured()) return generateText(prompt, maxTokens);
+  return generateTextWithGroq(prompt, maxTokens).catch((err) => {
+    logError('Groq text generation failed - falling back to Gemini for this request', err);
+    return generateText(prompt, maxTokens);
+  });
 }
 
 function generateTextRoutedWithFinish(prompt: string, maxTokens?: number): Promise<{ text: string; truncated: boolean }> {
-  return isGroqConfigured() ? generateTextWithGroqFinish(prompt, maxTokens) : generateTextWithFinish(prompt, maxTokens);
+  if (!isGroqConfigured()) return generateTextWithFinish(prompt, maxTokens);
+  return generateTextWithGroqFinish(prompt, maxTokens).catch((err) => {
+    logError('Groq text generation failed - falling back to Gemini for this request', err);
+    return generateTextWithFinish(prompt, maxTokens);
+  });
 }
 
 /**

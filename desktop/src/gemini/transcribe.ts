@@ -1,5 +1,6 @@
 import { generateWithAudio } from './geminiClient';
 import { transcribeWithGroq, isGroqConfigured } from '../groq/groqClient';
+import { logError } from '../logger';
 
 const TRANSCRIBE_PROMPT =
   'This is a ~30-second clip from a university lecture recording, possibly with background ' +
@@ -15,11 +16,21 @@ const TRANSCRIBE_PROMPT =
  * Sends one ~30s WAV chunk off for transcription and returns the text (or
  * '' for silence). Goes to Groq's free Whisper API when the user configured
  * one (see groqClient.ts for why), otherwise falls back to Gemini exactly
- * as before - configuring Groq is optional, not a second required key.
+ * as before - configuring Groq is optional, not a second required key. If
+ * Groq itself fails (rate limit, timeout, ...) this chunk falls back to
+ * Gemini instead of being lost, the same as notesBuilder.ts's routing.
  */
 export async function transcribeAudioChunk(wavBuffer: Buffer): Promise<string> {
-  const text = isGroqConfigured()
-    ? await transcribeWithGroq(wavBuffer)
-    : await generateWithAudio(TRANSCRIBE_PROMPT, wavBuffer.toString('base64'));
+  let text: string;
+  if (!isGroqConfigured()) {
+    text = await generateWithAudio(TRANSCRIBE_PROMPT, wavBuffer.toString('base64'));
+  } else {
+    try {
+      text = await transcribeWithGroq(wavBuffer);
+    } catch (err) {
+      logError('Groq transcription failed - falling back to Gemini for this chunk', err);
+      text = await generateWithAudio(TRANSCRIBE_PROMPT, wavBuffer.toString('base64'));
+    }
+  }
   return text.trim();
 }
