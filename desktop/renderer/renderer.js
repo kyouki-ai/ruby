@@ -1354,7 +1354,7 @@ async function openNote(subject, lecture, backTo) {
     photosAddBtn.disabled = true;
     photosAddBtn.innerHTML = `${rubyGemSvg(13)}`;
     try {
-      const { fileNames, markdown: updatedMarkdown } = await window.lectureApp.addLecturePhotos(subject, lecture.folderName);
+      const { fileNames, markdown: updatedMarkdown } = await window.lectureApp.addLecturePhotos(subject, lecture.folderName, selectedDetailLevel);
       if (fileNames.length > 0) renderPhotos();
       if (updatedMarkdown) {
         markdown = updatedMarkdown;

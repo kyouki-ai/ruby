@@ -765,7 +765,7 @@ function setupIpcHandlers(): void {
   // slide file live during recording (IPC_ATTACH_SLIDE_FILE) - the whole
   // point is covering slides shot on a phone during a mic-only recording,
   // so the AI needs to actually see them, not just store them as a gallery.
-  ipcMain.handle(channels.IPC_ADD_LECTURE_PHOTOS, async (_e, subject: string, folderName: string) => {
+  ipcMain.handle(channels.IPC_ADD_LECTURE_PHOTOS, async (_e, subject: string, folderName: string, detailLevel?: NotesDetailLevel) => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Фото', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
@@ -798,7 +798,7 @@ function setupIpcHandlers(): void {
 
     let markdown: string | null = null;
     try {
-      markdown = await buildLectureNotes(raw.transcript, raw.slides, []);
+      markdown = await buildLectureNotes(raw.transcript, raw.slides, [], detailLevel);
       library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown, false);
     } catch (err) {
       logError('Failed to rebuild notes after attaching photos', err);

@@ -184,13 +184,38 @@ export async function generateTextWithGroq(prompt: string, maxTokens?: number): 
   return (await generateTextWithGroqFinish(prompt, maxTokens)).text;
 }
 
+/**
+ * Some auto-picked Groq models (see resolveTextModel) have a real max_tokens
+ * ceiling well below what their listed context window would suggest - Groq
+ * then rejects the request outright with a 400 naming the actual ceiling
+ * (seen in production: "max_tokens must be less than or equal to `512`").
+ * Parsing that number out and retrying once with it beats permanently
+ * failing every "Подробно" request against that model for the rest of the
+ * session (falling through to Gemini/Cloudflare every single round instead
+ * of ever actually using the configured Groq key).
+ */
+function parseMaxTokensCeiling(errorText: string): number | null {
+  const match = errorText.match(/max_tokens.*?less than or equal to `?(\d+)`?/i);
+  return match ? parseInt(match[1], 10) : null;
+}
+
 /** Same as generateTextWithGroq, but also reports whether the response was cut off by max_tokens (see notesBuilder.ts's continuation loop). */
 export async function generateTextWithGroqFinish(prompt: string, maxTokens?: number): Promise<GroqResult> {
   const model = await resolveTextModel();
-  const response = await postChatCompletion(
-    { model, messages: [{ role: 'user', content: prompt }], ...(maxTokens ? { max_tokens: maxTokens } : {}) },
-    30_000
-  );
+  const body = (tokens?: number) => ({
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    ...(tokens ? { max_tokens: tokens } : {}),
+  });
+  let response = await postChatCompletion(body(maxTokens), 30_000);
+
+  if (!response.ok && response.status === 400 && maxTokens) {
+    const errorText = await response.clone().text();
+    const ceiling = parseMaxTokensCeiling(errorText);
+    if (ceiling && ceiling < maxTokens) {
+      response = await postChatCompletion(body(ceiling), 30_000);
+    }
+  }
 
   if (!response.ok) {
     throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);

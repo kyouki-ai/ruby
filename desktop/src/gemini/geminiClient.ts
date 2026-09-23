@@ -91,10 +91,15 @@ async function callGemini(model: string, contents: unknown[], maxOutputTokens?: 
           ...(maxOutputTokens ? { generationConfig: { maxOutputTokens } } : {}),
         }),
         // A hung request must not be able to block finalizing a lecture for
-        // long - 20s, not 45s: a normal reply takes a few seconds, and the
+        // long - 20s, not 45s, is enough for a normal (short) reply, and the
         // "Собираю конспект..." button feeling stuck matters more than
-        // giving a slow response every possible extra second to finish.
-        signal: AbortSignal.timeout(20_000),
+        // giving a slow response every possible extra second to finish. But
+        // a "Подробно" conspect explicitly asks for up to ~8000 output
+        // tokens in one non-streamed response - generating that much text
+        // can legitimately take longer than 20s on its own, timeout aborted
+        // in production before Gemini ever got to finish (seen as a genuine
+        // TimeoutError, not a slow/hung request).
+        signal: AbortSignal.timeout(maxOutputTokens && maxOutputTokens > 1000 ? 60_000 : 20_000),
       });
     } catch (err) {
       lastError = err as Error;
