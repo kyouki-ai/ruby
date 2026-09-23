@@ -38,6 +38,7 @@ import { AudioPipeline, TranscriptSegment } from './transcription/audioPipeline'
 import { SlidePipeline, SlideEntry, describePhoto } from './slides/slidePipeline';
 import {
   buildLectureNotes,
+  buildLectureNotesChunk,
   generateQuizFromNotes,
   generateFlashcardPairsFromNotes,
   formatTimestamp,
@@ -97,6 +98,24 @@ let lastSlideScreenshotBase64: string | null = null;
 // If set, the next "stop" appends to this existing lecture instead of
 // creating a new one - picked via the "Лекция" dropdown on the Live tab.
 let targetLectureFolder: string | null = null;
+// True when targetLectureFolder was created by startNewSession() below for
+// THIS session (a brand-new recording), as opposed to being explicitly
+// picked by the user via IPC_SET_RECORDING_TARGET to continue an already-
+// finished lecture - finalizeSession needs to tell the two apart, since a
+// fresh session should overwrite its own live-preview content, not run
+// through appendToLecture's "## Продолжение записи" merge.
+let targetIsFreshPlaceholder = false;
+// The conspect assembled so far from small chunks of new transcript/slides,
+// built up throughout the recording instead of all at once at the end (see
+// buildNextLiveChunkIfDue) - both a live preview and, just as importantly,
+// crash/restart safety: a session killed mid-recording used to lose the
+// entire thing, since nothing was ever written to disk until the very end.
+let liveNotesMarkdown = '';
+let lastChunkTranscriptIndex = 0;
+let lastChunkSlideIndex = 0;
+let lastChunkMarkedMomentIndex = 0;
+let liveChunkBuildInFlight = false;
+let autosaveTimer: ReturnType<typeof setInterval> | null = null;
 // Lets the renderer's "Stop" button interrupt an in-flight chat reply.
 let currentChatAbortController: AbortController | null = null;
 
@@ -298,15 +317,6 @@ function checkAssignment(segment: TranscriptSegment): void {
   }
 }
 
-/**
- * The structured conspect (headings/bullets, via Gemini) is only built once,
- * when the lecture stops - not continuously during recording. Rebuilding it
- * every time a segment/slide came in used to cost one extra Gemini call
- * every few minutes, all day, for a "live" view of something that's only
- * actually needed once the lecture is over. The live transcript itself still
- * updates in real time below, for free - it's just the raw segments already
- * coming back from transcription, no extra API calls involved.
- */
 function resetLectureState(): void {
   currentSession = null;
   transcript = [];
@@ -315,6 +325,12 @@ function resetLectureState(): void {
   lastSlideText = null;
   lastSlideScreenshotBase64 = null;
   slidePipeline = new SlidePipeline();
+  liveNotesMarkdown = '';
+  lastChunkTranscriptIndex = 0;
+  lastChunkSlideIndex = 0;
+  lastChunkMarkedMomentIndex = 0;
+  liveChunkBuildInFlight = false;
+  stopAutosave();
   audioPipeline = new AudioPipeline({
     onSegment: (segment) => {
       transcript.push(segment);
@@ -327,12 +343,114 @@ function resetLectureState(): void {
   });
 }
 
+// How often raw material gets flushed to disk (cheap - no AI call) and a
+// live notes chunk is considered. A chunk only actually gets built once
+// there's a meaningful amount of new speech, so this is an upper bound on
+// the cadence, not a fixed cost every tick.
+const AUTOSAVE_INTERVAL_MS = 60_000;
+const CHUNK_MIN_NEW_CHARS = 1200;
+
+function startAutosave(): void {
+  stopAutosave();
+  autosaveTimer = setInterval(() => void autosaveTick(), AUTOSAVE_INTERVAL_MS);
+}
+
+function stopAutosave(): void {
+  if (autosaveTimer) {
+    clearInterval(autosaveTimer);
+    autosaveTimer = null;
+  }
+}
+
+/**
+ * Builds notes for whatever transcript/slides have arrived since the last
+ * chunk and appends them to liveNotesMarkdown (in memory + pushed to the
+ * renderer for a live preview - disk persistence is autosaveTick's job
+ * below, deliberately kept separate, see saveSessionRecovery). Safe to call
+ * opportunistically (autosaveTick) or forced (finalizeSession, to catch up
+ * the tail end) - a no-op if there's nothing new, or if a previous call is
+ * still in flight.
+ */
+async function buildNextLiveChunkIfDue(force: boolean): Promise<void> {
+  if (liveChunkBuildInFlight) return;
+  const newTranscript = transcript.slice(lastChunkTranscriptIndex);
+  const newSlides = slidePipeline.slides.slice(lastChunkSlideIndex);
+  if (newTranscript.length === 0 && newSlides.length === 0) return;
+
+  const newChars = newTranscript.reduce((sum, s) => sum + s.text.length, 0);
+  if (!force && newChars < CHUNK_MIN_NEW_CHARS && newSlides.length === 0) return;
+
+  const newMarkedMoments = markedMoments.slice(lastChunkMarkedMomentIndex);
+  const isFirstChunk = lastChunkTranscriptIndex === 0 && lastChunkSlideIndex === 0;
+  // Snapshot the boundary now, not after the await below - onSegment keeps
+  // pushing to `transcript` while this request is in flight, and those newer
+  // segments must stay unconsumed for the next chunk, not get silently
+  // swallowed into this one's "already covered" range.
+  const consumedTranscriptIndex = transcript.length;
+  const consumedSlideIndex = slidePipeline.slides.length;
+  const consumedMarkedMomentIndex = markedMoments.length;
+
+  liveChunkBuildInFlight = true;
+  try {
+    const chunkMarkdown = await buildLectureNotesChunk(newTranscript, newSlides, newMarkedMoments, isFirstChunk);
+    liveNotesMarkdown = liveNotesMarkdown ? `${liveNotesMarkdown}\n${chunkMarkdown}` : chunkMarkdown;
+    lastChunkTranscriptIndex = consumedTranscriptIndex;
+    lastChunkSlideIndex = consumedSlideIndex;
+    lastChunkMarkedMomentIndex = consumedMarkedMomentIndex;
+    sendToRenderer(channels.IPC_NOTES_UPDATED, liveNotesMarkdown);
+  } catch (err) {
+    logError('Failed to build a live notes chunk during recording', err);
+  } finally {
+    liveChunkBuildInFlight = false;
+  }
+}
+
+async function autosaveTick(): Promise<void> {
+  if (!currentSession || !targetLectureFolder) return;
+  await buildNextLiveChunkIfDue(false);
+  try {
+    // A separate recovery file, not raw.json/notes.md directly - see
+    // saveSessionRecovery's own comment for why writing the real files
+    // this early would be unsafe for a "continuation" recording.
+    library.saveSessionRecovery(settings.libraryPath, settings.lastSubject, targetLectureFolder, {
+      markdown: liveNotesMarkdown,
+      raw: { transcript, slides: slidePipeline.slides, assignments },
+    });
+  } catch (err) {
+    logError('Failed to autosave in-progress recording', err);
+  }
+}
+
 /** Starts a fresh lecture session - used by both the extension (over WS) and the in-app mic recorder. */
 function startNewSession(tabTitle: string, tabUrl: string): void {
   resetLectureState();
   currentSession = { tabTitle, tabUrl, startedAt: Date.now() };
+
+  // Give this session its own lecture folder immediately instead of only at
+  // the end - it's what autosaveTick/buildNextLiveChunkIfDue write into
+  // throughout the recording, so a crash/restart mid-lecture loses at most
+  // the last minute or two of unflushed audio, not the whole thing. Not done
+  // when targetLectureFolder is already set: that means the user explicitly
+  // picked an existing lecture to continue (see IPC_SET_RECORDING_TARGET),
+  // and this session's material belongs there instead.
+  if (!targetLectureFolder) {
+    try {
+      const meta = library.saveLecture(settings.libraryPath, settings.lastSubject, {
+        title: tabTitle || 'Lecture',
+        sourceUrl: tabUrl,
+        durationSec: 0,
+        markdown: '',
+      });
+      targetLectureFolder = meta.folderName;
+      targetIsFreshPlaceholder = true;
+    } catch (err) {
+      logError('Failed to create a placeholder lecture at recording start', err);
+    }
+  }
+
   sendToRenderer(channels.IPC_CONNECTION_STATUS, true, tabTitle);
   startSilenceMonitor();
+  startAutosave();
 }
 
 // Auto-stop-on-silence (opt-in, see AppSettings.autoStopSilenceEnabled):
@@ -444,6 +562,7 @@ function setupWsServer(): void {
 async function finalizeSession(): Promise<void> {
   if (!currentSession) return;
   stopSilenceMonitor();
+  stopAutosave();
   const durationSec = (Date.now() - currentSession.startedAt) / 1000;
 
   // Enqueuing a chunk only schedules its Gemini transcription - it doesn't
@@ -451,54 +570,75 @@ async function finalizeSession(): Promise<void> {
   // before the last (or, for a short recording, the only) chunk came back.
   await audioPipeline?.waitForIdle();
 
-  let markdown: string;
+  // Catch up the live-built conspect with whatever arrived since the last
+  // periodic chunk - usually just the last minute or so of the lecture.
+  await buildNextLiveChunkIfDue(true);
+
+  let markdown = liveNotesMarkdown;
   let notesFailed = false;
-  try {
-    markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
-  } catch (err) {
-    logError('Failed to build notes via Gemini - saving raw transcript instead', err);
-    // Never lose the recording just because the notes-building call failed
-    // (rate limit, timeout, network) - fall back to the raw material. The
-    // real transcript/slides are still saved separately (see `raw` below),
-    // so a rebuild can be retried later instead of this being the final word.
-    notesFailed = true;
-    const slidesFallback =
-      slidePipeline.slides.length > 0
-        ? '\n\n## Слайды\n\n' +
-          slidePipeline.slides.map((s) => `[${formatTimestamp(s.offsetSec)}] ${s.content}`).join('\n\n')
-        : '';
-    markdown =
-      transcript.length > 0 || slidesFallback
-        ? '## Расшифровка (сборка конспекта не удалась)\n\n' +
-          (transcript.map((s) => s.text).join(' ') || '(речь не распознана)') +
-          slidesFallback
-        : '*Запись не удалось расшифровать - конспект пуст. Подробности в error.log.*';
+  if (!markdown) {
+    // The chunk-by-chunk pipeline never produced anything at all (e.g. no AI
+    // provider was configured for the whole recording) - fall back to a
+    // single whole-transcript build as a last resort, same as before this
+    // incremental approach existed.
+    try {
+      markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
+    } catch (err) {
+      logError('Failed to build notes via Gemini - saving raw transcript instead', err);
+      // Never lose the recording just because the notes-building call failed
+      // (rate limit, timeout, network) - fall back to the raw material. The
+      // real transcript/slides are still saved separately (see `raw` below),
+      // so a rebuild can be retried later instead of this being the final word.
+      notesFailed = true;
+      const slidesFallback =
+        slidePipeline.slides.length > 0
+          ? '\n\n## Слайды\n\n' +
+            slidePipeline.slides.map((s) => `[${formatTimestamp(s.offsetSec)}] ${s.content}`).join('\n\n')
+          : '';
+      markdown =
+        transcript.length > 0 || slidesFallback
+          ? '## Расшифровка (сборка конспекта не удалась)\n\n' +
+            (transcript.map((s) => s.text).join(' ') || '(речь не распознана)') +
+            slidesFallback
+          : '*Запись не удалось расшифровать - конспект пуст. Подробности в error.log.*';
+    }
   }
   sendToRenderer(channels.IPC_NOTES_UPDATED, markdown);
 
   const raw = { transcript, slides: slidePipeline.slides, assignments };
 
   try {
-    const meta = targetLectureFolder
-      ? library.appendToLecture(
-          settings.libraryPath,
-          settings.lastSubject,
-          targetLectureFolder,
-          markdown,
-          durationSec,
-          currentSession.tabTitle || 'Lecture',
-          notesFailed,
-          raw
-        )
-      : library.saveLecture(settings.libraryPath, settings.lastSubject, {
-          title: currentSession.tabTitle || 'Lecture',
-          sourceUrl: currentSession.tabUrl,
-          durationSec,
-          markdown,
-          notesFailed,
-          raw,
-        });
+    const meta =
+      targetIsFreshPlaceholder && targetLectureFolder
+        ? library.finalizeLiveLecture(settings.libraryPath, settings.lastSubject, targetLectureFolder, {
+            title: currentSession.tabTitle || 'Lecture',
+            sourceUrl: currentSession.tabUrl,
+            durationSec,
+            markdown,
+            notesFailed,
+            raw,
+          })
+        : targetLectureFolder
+          ? library.appendToLecture(
+              settings.libraryPath,
+              settings.lastSubject,
+              targetLectureFolder,
+              markdown,
+              durationSec,
+              currentSession.tabTitle || 'Lecture',
+              notesFailed,
+              raw
+            )
+          : library.saveLecture(settings.libraryPath, settings.lastSubject, {
+              title: currentSession.tabTitle || 'Lecture',
+              sourceUrl: currentSession.tabUrl,
+              durationSec,
+              markdown,
+              notesFailed,
+              raw,
+            });
     console.log(`Lecture saved: ${settings.lastSubject}/${meta.folderName}`);
+    library.clearSessionRecovery(settings.libraryPath, settings.lastSubject, meta.folderName);
 
     // The screenshots behind this session's captured slides were only ever
     // used transiently for OCR/vision text extraction and then discarded -
@@ -516,6 +656,12 @@ async function finalizeSession(): Promise<void> {
     sendToRenderer(channels.IPC_LECTURE_SAVED, meta);
   } catch (err) {
     logError('Failed to save lecture to disk', err);
+  } finally {
+    // Never let a stale folder from this session leak into the next one -
+    // an extension-triggered recording doesn't always go through the
+    // in-app picker that would otherwise reset this (see IPC_SET_RECORDING_TARGET).
+    targetLectureFolder = null;
+    targetIsFreshPlaceholder = false;
   }
 }
 
@@ -838,6 +984,7 @@ function setupIpcHandlers(): void {
   });
   ipcMain.handle(channels.IPC_SET_RECORDING_TARGET, (_e, folderName: string | null) => {
     targetLectureFolder = folderName;
+    targetIsFreshPlaceholder = false; // an explicit pick is always a real continuation, never "fresh"
   });
   ipcMain.handle(channels.IPC_CHOOSE_LIBRARY_FOLDER, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] });

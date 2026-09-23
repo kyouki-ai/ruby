@@ -826,6 +826,11 @@ window.lectureApp.onNotesUpdated((markdown) => {
   stopFinalizingCountdown();
   notesBox.innerHTML = renderMarkdown(markdown);
   notesBox.dataset.raw = markdown;
+  // The panel starts hidden while recording (nothing to show yet - see
+  // onConnectionStatus below), but now that notes are actually built
+  // incrementally throughout the recording, not just once at the end, show
+  // it the moment real content exists instead of waiting for the stop.
+  if (markdown) document.getElementById('live-notes-panel').style.display = '';
 });
 
 window.lectureApp.onSlidePreview(({ screenshotBase64, offsetSec }) => {

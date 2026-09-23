@@ -403,6 +403,74 @@ export function saveLectureRaw(libraryPath: string, subject: string, folderName:
   fs.writeFileSync(rawPath(path.join(libraryPath, subject, folderName)), JSON.stringify(raw), 'utf-8');
 }
 
+function sessionRecoveryPath(dir: string): string {
+  return path.join(dir, 'session-recovery.json');
+}
+
+/**
+ * Periodic crash-safety snapshot of a recording still in progress - a
+ * SEPARATE file from raw.json/notes.md, written every minute or so while
+ * recording (see main.ts's autosaveTick), on purpose never touching those
+ * real files until the session actually finishes. Overwriting raw.json/
+ * notes.md mid-session would be safe for a brand-new lecture's own folder,
+ * but not for one that's continuing an already-finished lecture ("Лекция"
+ * dropdown / a calendar-scheduled placeholder) - appendToLecture's merge
+ * with the PRIOR session's content only happens once, at the end, so
+ * writing the real files early would silently blow that prior content away
+ * until the merge caught up. A crash/restart before that merge now leaves
+ * this file lying around instead of losing the recording outright, even
+ * without an automatic recovery flow yet.
+ */
+export function saveSessionRecovery(
+  libraryPath: string,
+  subject: string,
+  folderName: string,
+  data: { markdown: string; raw: LectureRawMaterial }
+): void {
+  const dir = path.join(libraryPath, subject, folderName);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(sessionRecoveryPath(dir), JSON.stringify(data), 'utf-8');
+}
+
+/** Called once a session finishes normally - the snapshot above is now redundant. */
+export function clearSessionRecovery(libraryPath: string, subject: string, folderName: string): void {
+  fs.rm(sessionRecoveryPath(path.join(libraryPath, subject, folderName)), () => undefined);
+}
+
+/**
+ * Finalizes a lecture folder that was created at the start of its OWN
+ * recording session (see startNewSession), once that session ends - a plain
+ * overwrite of title/duration/notes/raw. Deliberately NOT the same as
+ * appendToLecture's "## Продолжение записи" merge below: that merge is for
+ * a genuinely separate, later session continuing an already-finished
+ * lecture, whereas this is the first and only save for a folder nothing
+ * else has ever written real content into yet.
+ */
+export function finalizeLiveLecture(
+  libraryPath: string,
+  subject: string,
+  folderName: string,
+  params: {
+    title: string;
+    sourceUrl: string;
+    durationSec: number;
+    markdown: string;
+    notesFailed?: boolean;
+    raw?: LectureRawMaterial;
+  }
+): LectureMeta {
+  const dir = path.join(libraryPath, subject, folderName);
+  const meta = JSON.parse(fs.readFileSync(metaPath(dir), 'utf-8'));
+  meta.title = sanitizeName(params.title);
+  meta.sourceUrl = params.sourceUrl;
+  meta.durationSec = params.durationSec;
+  meta.notesFailed = Boolean(params.notesFailed);
+  fs.writeFileSync(metaPath(dir), JSON.stringify(meta, null, 2), 'utf-8');
+  fs.writeFileSync(notesPath(dir), params.markdown, 'utf-8');
+  if (params.raw) fs.writeFileSync(rawPath(dir), JSON.stringify(params.raw), 'utf-8');
+  return { folderName, subject, ...meta };
+}
+
 /**
  * Adds a new recording's content onto the end of an existing lecture instead
  * of creating a new one. If that lecture folder is somehow gone (deleted

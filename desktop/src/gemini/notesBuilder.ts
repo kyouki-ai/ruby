@@ -100,6 +100,64 @@ export interface MarkedMoment {
   text: string;
 }
 
+// A per-chunk response only ever has to cover a couple of minutes of speech,
+// so it should basically never need the continuation loop - this is a safety
+// net, not the expected path.
+const CHUNK_MAX_TOKENS = 2000;
+
+function buildChunkPrompt(
+  transcript: TranscriptSegment[],
+  slides: SlideEntry[],
+  markedMoments: MarkedMoment[],
+  isFirstChunk: boolean
+): string {
+  const transcriptText = transcript.map((seg) => `[${formatTimestamp(seg.startSec)}] ${seg.text}`).join('\n');
+  const slidesText = slides.map((slide) => `[${formatTimestamp(slide.offsetSec)}] ${slide.content}`).join('\n\n');
+  const markedText = markedMoments.map((m) => `[${formatTimestamp(m.offsetSec)}] ${m.text}`).join('\n');
+
+  return `You are taking structured, detailed lecture notes LIVE while the lecture is still being recorded - you only ever see one new short segment of speech at a time, never the whole lecture at once.
+
+${
+  isFirstChunk
+    ? 'This is the FIRST segment of the lecture.'
+    : "This is the NEXT segment, continuing directly after material you already wrote notes for (which you can no longer see) - do not reintroduce the lecture, do not summarize what came before, just keep documenting from here as if this were the next part of the same ongoing document."
+}
+
+Write a thorough writeup of just THIS segment - full sentences and paragraphs, not compressed bullet fragments, keeping the reasoning/examples/context the speaker gave. Use "## " headings only for a genuinely NEW topic that starts within this segment - if it's a continuation of the same topic as before, don't add a heading, just keep writing under it. Bold important terms/definitions. Include a "[mm:ss]" timestamp next to each bullet/section. Write formulas as LaTeX ($...$ or $$...$$). Write in the same language as the transcript - do not translate.
+${markedMoments.length > 0 ? '- The student flagged some moments in this segment as important - mark each with "⭐" at the start of that bullet/section.' : ''}
+
+NEW SPEECH SEGMENT:
+${transcriptText || '(тишина)'}
+
+NEW SLIDES SEEN DURING THIS SEGMENT:
+${slidesText || '(нет)'}
+
+MOMENTS FLAGGED AS IMPORTANT IN THIS SEGMENT:
+${markedText || '(none)'}
+
+Write only the markdown continuation - no preamble, no closing remarks, no "in this segment we covered" wrap-up.`;
+}
+
+/**
+ * Builds notes for just a new slice of an ongoing lecture, mid-recording -
+ * not the whole thing (see buildLectureNotes below for that). Always writes
+ * in the detailed style: building this incrementally, a couple of minutes at
+ * a time, throughout the recording is what makes "Подробно" cheap and fast
+ * to finish the instant the user stops, instead of one huge expensive call
+ * over the entire transcript at the end. A "Кратко" request afterward can
+ * just condense this already-written detailed text instead of reprocessing
+ * the raw transcript from scratch.
+ */
+export function buildLectureNotesChunk(
+  transcript: TranscriptSegment[],
+  slides: SlideEntry[],
+  markedMoments: MarkedMoment[],
+  isFirstChunk: boolean
+): Promise<string> {
+  const prompt = buildChunkPrompt(transcript, slides, markedMoments, isFirstChunk);
+  return generateLongText(prompt, CHUNK_MAX_TOKENS);
+}
+
 // A long lecture's raw transcript (plus slide text) can outright exceed a
 // Groq model's context window on its own, before the prompt instructions or
 // requested output are even counted - Groq then rejects the request itself
