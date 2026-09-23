@@ -55,7 +55,7 @@ async function generateLongText(prompt: string, maxTokens: number): Promise<stri
   return full;
 }
 
-function formatTimestamp(sec: number): string {
+export function formatTimestamp(sec: number): string {
   const m = Math.floor(sec / 60)
     .toString()
     .padStart(2, '0');

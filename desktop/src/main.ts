@@ -40,6 +40,7 @@ import {
   buildLectureNotes,
   generateQuizFromNotes,
   generateFlashcardPairsFromNotes,
+  formatTimestamp,
   MarkedMoment,
   NotesDetailLevel,
 } from './gemini/notesBuilder';
@@ -450,9 +451,16 @@ async function finalizeSession(): Promise<void> {
     // real transcript/slides are still saved separately (see `raw` below),
     // so a rebuild can be retried later instead of this being the final word.
     notesFailed = true;
+    const slidesFallback =
+      slidePipeline.slides.length > 0
+        ? '\n\n## Слайды\n\n' +
+          slidePipeline.slides.map((s) => `[${formatTimestamp(s.offsetSec)}] ${s.content}`).join('\n\n')
+        : '';
     markdown =
-      transcript.length > 0
-        ? '## Расшифровка (сборка конспекта не удалась)\n\n' + transcript.map((s) => s.text).join(' ')
+      transcript.length > 0 || slidesFallback
+        ? '## Расшифровка (сборка конспекта не удалась)\n\n' +
+          (transcript.map((s) => s.text).join(' ') || '(речь не распознана)') +
+          slidesFallback
         : '*Запись не удалось расшифровать - конспект пуст. Подробности в error.log.*';
   }
   sendToRenderer(channels.IPC_NOTES_UPDATED, markdown);
