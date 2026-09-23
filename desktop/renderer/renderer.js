@@ -845,6 +845,14 @@ window.lectureApp.onSlidePreview(({ screenshotBase64, offsetSec }) => {
 });
 
 window.lectureApp.onLectureSaved((meta) => {
+  // If this exact lecture's note is already open elsewhere (e.g. the user
+  // navigated to its card while the recording was still finalizing), its
+  // content was loaded before the real save landed - reopen it now instead
+  // of leaving it stuck showing stale/empty data until a manual close/reopen.
+  if (libraryState.view === 'note' && libraryState.noteKey === `${meta.subject}::${meta.folderName}`) {
+    libraryState.noteReopen();
+  }
+
   // Stay right here - the transcript (left) and the just-built conspect
   // (right, already pushed via onNotesUpdated above) are exactly what the
   // user was watching happen. Yanking them to the library view instead was
@@ -1228,6 +1236,14 @@ function renderGroupColumn(subject, groupId, name, lecturesInGroup) {
 
 async function openNote(subject, lecture, backTo) {
   libraryState.view = 'note';
+  // A recording that's still finalizing (or a "Продолжение записи" into this
+  // same lecture) writes its real content to disk only once it's done, not
+  // during - if this exact note is already open when that finishes, nothing
+  // was pushing the fresh content in, so it looked stuck until a manual
+  // close/reopen. onLectureSaved below now reopens automatically when it
+  // matches whatever's currently on screen.
+  libraryState.noteKey = `${subject}::${lecture.folderName}`;
+  libraryState.noteReopen = () => openNote(subject, lecture, backTo);
   libTitle.textContent = lecture.title;
   libBackBtn.style.display = 'flex';
   libBackBtn.onclick = () => (backTo === 'search' ? renderSearchResults() : openSubject(subject));

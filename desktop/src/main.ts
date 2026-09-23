@@ -116,6 +116,12 @@ let lastChunkSlideIndex = 0;
 let lastChunkMarkedMomentIndex = 0;
 let liveChunkBuildInFlight = false;
 let autosaveTimer: ReturnType<typeof setInterval> | null = null;
+// A confirmed-correct excerpt from this lecture's first chunk, reused as a
+// language reference for every later chunk - a short chunk occasionally
+// comes back mistranscribed entirely into the wrong language with no
+// surrounding context to correct it, which used to make an isolated part of
+// the notes switch language for no real reason (see buildLectureNotesChunk).
+let languageAnchor: string | null = null;
 // Lets the renderer's "Stop" button interrupt an in-flight chat reply.
 let currentChatAbortController: AbortController | null = null;
 
@@ -330,6 +336,7 @@ function resetLectureState(): void {
   lastChunkSlideIndex = 0;
   lastChunkMarkedMomentIndex = 0;
   liveChunkBuildInFlight = false;
+  languageAnchor = null;
   stopAutosave();
   audioPipeline = new AudioPipeline({
     onSegment: (segment) => {
@@ -392,7 +399,13 @@ async function buildNextLiveChunkIfDue(force: boolean): Promise<void> {
 
   liveChunkBuildInFlight = true;
   try {
-    const chunkMarkdown = await buildLectureNotesChunk(newTranscript, newSlides, newMarkedMoments, isFirstChunk);
+    const chunkMarkdown = await buildLectureNotesChunk(newTranscript, newSlides, newMarkedMoments, isFirstChunk, languageAnchor);
+    if (!languageAnchor) {
+      languageAnchor = newTranscript
+        .map((s) => s.text)
+        .join(' ')
+        .slice(0, 300);
+    }
     liveNotesMarkdown = liveNotesMarkdown ? `${liveNotesMarkdown}\n${chunkMarkdown}` : chunkMarkdown;
     lastChunkTranscriptIndex = consumedTranscriptIndex;
     lastChunkSlideIndex = consumedSlideIndex;

@@ -109,11 +109,25 @@ function buildChunkPrompt(
   transcript: TranscriptSegment[],
   slides: SlideEntry[],
   markedMoments: MarkedMoment[],
-  isFirstChunk: boolean
+  isFirstChunk: boolean,
+  languageAnchor: string | null
 ): string {
   const transcriptText = transcript.map((seg) => `[${formatTimestamp(seg.startSec)}] ${seg.text}`).join('\n');
   const slidesText = slides.map((slide) => `[${formatTimestamp(slide.offsetSec)}] ${slide.content}`).join('\n\n');
   const markedText = markedMoments.map((m) => `[${formatTimestamp(m.offsetSec)}] ${m.text}`).join('\n');
+
+  // Each chunk is transcribed independently, and a short chunk occasionally
+  // comes back mistranscribed into the wrong language entirely (audio
+  // quality, an accent, a whisper-model glitch) - with no surrounding
+  // context to correct against the way a whole-transcript build would have,
+  // "write in the same language as the transcript" then produces a chunk of
+  // notes in the WRONG language, breaking consistency with the rest of the
+  // document. Anchoring to a confirmed-correct excerpt from earlier in this
+  // same lecture avoids that: the anchor's language wins even if the new
+  // segment below looks like a different language.
+  const languageInstruction = languageAnchor
+    ? `Write in the same language as this confirmed excerpt from earlier in the same lecture: "${languageAnchor}" - if the new segment below looks like a different language, that is a transcription glitch, not a real language change; write your notes in the anchor's language regardless.`
+    : 'Write in the same language as the transcript below - do not translate.';
 
   return `You are taking structured, detailed lecture notes LIVE while the lecture is still being recorded - you only ever see one new short segment of speech at a time, never the whole lecture at once.
 
@@ -123,7 +137,7 @@ ${
     : "This is the NEXT segment, continuing directly after material you already wrote notes for (which you can no longer see) - do not reintroduce the lecture, do not summarize what came before, just keep documenting from here as if this were the next part of the same ongoing document."
 }
 
-Write a thorough writeup of just THIS segment - full sentences and paragraphs, not compressed bullet fragments, keeping the reasoning/examples/context the speaker gave. Use "## " headings only for a genuinely NEW topic that starts within this segment - if it's a continuation of the same topic as before, don't add a heading, just keep writing under it. Bold important terms/definitions. Include a "[mm:ss]" timestamp next to each bullet/section. Write formulas as LaTeX ($...$ or $$...$$). Write in the same language as the transcript - do not translate.
+Write a thorough writeup of just THIS segment - full sentences and paragraphs, not compressed bullet fragments, keeping the reasoning/examples/context the speaker gave. Use "## " headings only for a genuinely NEW topic that starts within this segment - if it's a continuation of the same topic as before, don't add a heading, just keep writing under it. Bold important terms/definitions. Include a "[mm:ss]" timestamp next to each bullet/section. Write formulas as LaTeX ($...$ or $$...$$). ${languageInstruction}
 ${markedMoments.length > 0 ? '- The student flagged some moments in this segment as important - mark each with "⭐" at the start of that bullet/section.' : ''}
 
 NEW SPEECH SEGMENT:
@@ -147,14 +161,20 @@ Write only the markdown continuation - no preamble, no closing remarks, no "in t
  * over the entire transcript at the end. A "Кратко" request afterward can
  * just condense this already-written detailed text instead of reprocessing
  * the raw transcript from scratch.
+ *
+ * languageAnchor is a confirmed-correct excerpt from earlier in the SAME
+ * lecture (see main.ts), used to keep every chunk in the same language even
+ * if one chunk's own transcript got mistranscribed into a different one -
+ * pass null only for the very first chunk, before any anchor exists yet.
  */
 export function buildLectureNotesChunk(
   transcript: TranscriptSegment[],
   slides: SlideEntry[],
   markedMoments: MarkedMoment[],
-  isFirstChunk: boolean
+  isFirstChunk: boolean,
+  languageAnchor: string | null
 ): Promise<string> {
-  const prompt = buildChunkPrompt(transcript, slides, markedMoments, isFirstChunk);
+  const prompt = buildChunkPrompt(transcript, slides, markedMoments, isFirstChunk, languageAnchor);
   return generateLongText(prompt, CHUNK_MAX_TOKENS);
 }
 
