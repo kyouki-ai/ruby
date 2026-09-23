@@ -442,6 +442,57 @@ export function clearSessionRecovery(libraryPath: string, subject: string, folde
   fs.rm(sessionRecoveryPath(path.join(libraryPath, subject, folderName)), () => undefined);
 }
 
+export function loadSessionRecovery(
+  libraryPath: string,
+  subject: string,
+  folderName: string
+): { markdown: string; raw: LectureRawMaterial } | null {
+  try {
+    const raw = fs.readFileSync(sessionRecoveryPath(path.join(libraryPath, subject, folderName)), 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export interface RecoverableSession {
+  subject: string;
+  folderName: string;
+  title: string;
+  transcriptChars: number;
+}
+
+/**
+ * Scans the whole library for a session-recovery.json left behind by a
+ * crash/restart mid-recording (see saveSessionRecovery's own comment) - only
+ * ever called at app startup, before any new recording has had a chance to
+ * create its own, so anything found here is necessarily orphaned, not a
+ * currently-active session's in-progress snapshot.
+ */
+export function findRecoverableSessions(libraryPath: string): RecoverableSession[] {
+  const results: RecoverableSession[] = [];
+  for (const subject of listSubjects(libraryPath)) {
+    const subjectDir = path.join(libraryPath, subject);
+    let folders: string[];
+    try {
+      folders = fs
+        .readdirSync(subjectDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      continue;
+    }
+    for (const folderName of folders) {
+      const recovery = loadSessionRecovery(libraryPath, subject, folderName);
+      if (!recovery) continue;
+      const meta = readMeta(subjectDir, folderName, subject);
+      const transcriptChars = recovery.raw.transcript.reduce((sum, s) => sum + s.text.length, 0);
+      results.push({ subject, folderName, title: meta?.title ?? folderName, transcriptChars });
+    }
+  }
+  return results;
+}
+
 /**
  * Finalizes a lecture folder that was created at the start of its OWN
  * recording session (see startNewSession), once that session ends - a plain

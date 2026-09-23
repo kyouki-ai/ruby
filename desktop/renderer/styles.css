@@ -206,6 +206,24 @@ body {
   white-space: nowrap;
 }
 
+.recovery-banner {
+  padding: 10px 20px;
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--border);
+}
+.recovery-list { display: flex; flex-direction: column; gap: 8px; }
+.recovery-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+.recovery-item-text { flex: 1; min-width: 0; }
+.recovery-item-title { font-weight: 600; }
+.recovery-item-detail { color: var(--text-muted); }
+.recovery-item-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
 .icon-btn-lg {
   background: none;
   border: none;

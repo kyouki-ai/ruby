@@ -1,7 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import * as channels from './ipc/channels';
 import type { AppSettings } from './config';
-import type { LectureMeta, LectureRawMaterial, LibraryStats, SearchResults, SubjectMeta, LectureGroup } from './storage/libraryStore';
+import type {
+  LectureMeta,
+  LectureRawMaterial,
+  LibraryStats,
+  SearchResults,
+  SubjectMeta,
+  LectureGroup,
+  RecoverableSession,
+} from './storage/libraryStore';
 import type { ChatThread, ChatThreadMeta } from './storage/chatStore';
 import type { AssignmentEntry } from './assignments/assignmentDetector';
 import type { NotesDetailLevel } from './gemini/notesBuilder';
@@ -35,6 +43,13 @@ contextBridge.exposeInMainWorld('lectureApp', {
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke(channels.IPC_GET_SETTINGS),
   saveSettings: (settings: AppSettings): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_SAVE_SETTINGS, settings),
+
+  getRecoverableSessions: (): Promise<RecoverableSession[]> =>
+    ipcRenderer.invoke(channels.IPC_GET_RECOVERABLE_SESSIONS),
+  recoverSession: (subject: string, folderName: string): Promise<LectureMeta | null> =>
+    ipcRenderer.invoke(channels.IPC_RECOVER_SESSION, subject, folderName),
+  discardSessionRecovery: (subject: string, folderName: string): Promise<void> =>
+    ipcRenderer.invoke(channels.IPC_DISCARD_SESSION_RECOVERY, subject, folderName),
 
   copyNotes: (markdown: string): Promise<void> => ipcRenderer.invoke(channels.IPC_COPY_NOTES, markdown),
   copyText: (text: string): Promise<void> => ipcRenderer.invoke(channels.IPC_COPY_TEXT, text),

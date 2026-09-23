@@ -25,6 +25,11 @@ const TRANSLATIONS = {
     'status.disconnected': 'Не подключено',
     'status.needsApiKey': 'Нужен API-ключ',
 
+    'recovery.chars': '{count} симв. расшифровки',
+    'recovery.restore': 'Восстановить',
+    'recovery.discardTitle': 'Удалить черновик?',
+    'recovery.discardConfirm': 'Незавершённая запись «{title}» будет удалена без возможности восстановить.',
+
     'topbar.searchTitle': 'Поиск',
     'topbar.helpTitle': 'Как подключить расширение в браузере',
     'topbar.settingsTitle': 'Настройки',
@@ -289,6 +294,11 @@ const TRANSLATIONS = {
 
     'status.disconnected': 'Not connected',
     'status.needsApiKey': 'API key needed',
+
+    'recovery.chars': '{count} chars of transcript',
+    'recovery.restore': 'Restore',
+    'recovery.discardTitle': 'Discard draft?',
+    'recovery.discardConfirm': 'The unfinished recording "{title}" will be permanently discarded.',
 
     'topbar.searchTitle': 'Search',
     'topbar.helpTitle': 'How to connect the browser extension',

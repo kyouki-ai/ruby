@@ -2561,6 +2561,61 @@ async function initOnboarding() {
   welcomeAutoAdvanceTimer = setTimeout(proceedFromWelcome, 1700);
 }
 
+/**
+ * Offers to finish saving any lecture whose recording was interrupted by a
+ * crash/restart before it could finalize normally - see saveSessionRecovery
+ * in libraryStore.ts. Runs once at startup; anything found here is
+ * necessarily orphaned (a live session would still be recording, not sitting
+ * in this list).
+ */
+async function checkRecoverableSessions() {
+  const sessions = await window.lectureApp.getRecoverableSessions();
+  if (!sessions || sessions.length === 0) return;
+
+  const banner = document.getElementById('recovery-banner');
+  const list = document.getElementById('recovery-list');
+  list.innerHTML = '';
+
+  for (const session of sessions) {
+    const row = document.createElement('div');
+    row.className = 'recovery-item';
+    row.innerHTML = `
+      <div class="recovery-item-text">
+        <span class="recovery-item-title">${escapeHtml(session.title)}</span>
+        <span class="recovery-item-detail"> · ${escapeHtml(session.subject)} · ${escapeHtml(t('recovery.chars', { count: session.transcriptChars }))}</span>
+      </div>
+      <div class="recovery-item-actions">
+        <button class="secondary-btn recovery-restore-btn">${escapeHtml(t('recovery.restore'))}</button>
+        <button class="ghost-btn recovery-discard-btn">${escapeHtml(t('common.delete'))}</button>
+      </div>
+    `;
+
+    row.querySelector('.recovery-restore-btn').addEventListener('click', async () => {
+      row.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      const meta = await window.lectureApp.recoverSession(session.subject, session.folderName);
+      row.remove();
+      if (!list.children.length) banner.style.display = 'none';
+      if (meta) {
+        switchToTab('history');
+        openNote(meta.subject, meta, 'subject');
+      }
+    });
+
+    row.querySelector('.recovery-discard-btn').addEventListener('click', async () => {
+      const confirmed = await askConfirm(t('recovery.discardTitle'), t('recovery.discardConfirm', { title: session.title }));
+      if (!confirmed) return;
+      await window.lectureApp.discardSessionRecovery(session.subject, session.folderName);
+      row.remove();
+      if (!list.children.length) banner.style.display = 'none';
+    });
+
+    list.appendChild(row);
+  }
+
+  banner.style.display = 'block';
+}
+
 loadSettingsIntoForm();
 initChat();
 initOnboarding();
+checkRecoverableSessions();

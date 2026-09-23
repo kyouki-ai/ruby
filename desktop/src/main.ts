@@ -748,6 +748,51 @@ async function finalizeSession(): Promise<void> {
 
 function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_GET_SETTINGS, () => settings);
+  ipcMain.handle(channels.IPC_GET_RECOVERABLE_SESSIONS, () => library.findRecoverableSessions(settings.libraryPath));
+  // Turns an orphaned session-recovery.json (left behind by a crash/restart
+  // mid-recording - see saveSessionRecovery) into a real saved lecture, the
+  // same way finalizeSession would have if the app hadn't been interrupted.
+  // Re-derives "fresh lecture vs continuing an existing one" from the
+  // lecture's current meta.json exactly like IPC_SET_RECORDING_TARGET does,
+  // since there's no live session state left to ask.
+  ipcMain.handle(channels.IPC_RECOVER_SESSION, (_e, subject: string, folderName: string) => {
+    const recovery = library.loadSessionRecovery(settings.libraryPath, subject, folderName);
+    if (!recovery) return null;
+
+    const meta = library.loadLectureMeta(settings.libraryPath, subject, folderName);
+    const wasFreshPlaceholder = Boolean(meta && meta.durationSec === 0);
+    const approxDurationSec =
+      recovery.raw.transcript.length > 0 ? recovery.raw.transcript[recovery.raw.transcript.length - 1].endSec : 0;
+    const title = meta?.title || 'Lecture';
+    const markdown =
+      recovery.markdown ||
+      '*Запись прервалась раньше, чем конспект успел собраться - расшифровка сохранена отдельно, попробуй пересобрать конспект.*';
+
+    const resultMeta = wasFreshPlaceholder
+      ? library.finalizeLiveLecture(settings.libraryPath, subject, folderName, {
+          title,
+          sourceUrl: meta?.sourceUrl || '',
+          durationSec: approxDurationSec,
+          markdown,
+          notesFailed: !recovery.markdown,
+          raw: recovery.raw,
+        })
+      : library.appendToLecture(
+          settings.libraryPath,
+          subject,
+          folderName,
+          markdown,
+          approxDurationSec,
+          title,
+          !recovery.markdown,
+          recovery.raw
+        );
+    library.clearSessionRecovery(settings.libraryPath, subject, folderName);
+    return resultMeta;
+  });
+  ipcMain.handle(channels.IPC_DISCARD_SESSION_RECOVERY, (_e, subject: string, folderName: string) => {
+    library.clearSessionRecovery(settings.libraryPath, subject, folderName);
+  });
   ipcMain.handle(channels.IPC_SAVE_SETTINGS, (_e, next: AppSettings) => {
     settings = next;
     saveSettings(settings);

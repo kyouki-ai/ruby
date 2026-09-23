@@ -12,6 +12,9 @@ export const IPC_EXTENSION_READY = 'extension-ready';
 // renderer -> main (invoke/request-response)
 export const IPC_GET_SETTINGS = 'get-settings';
 export const IPC_SAVE_SETTINGS = 'save-settings';
+export const IPC_GET_RECOVERABLE_SESSIONS = 'get-recoverable-sessions';
+export const IPC_RECOVER_SESSION = 'recover-session';
+export const IPC_DISCARD_SESSION_RECOVERY = 'discard-session-recovery';
 export const IPC_COPY_NOTES = 'copy-notes';
 export const IPC_COPY_TEXT = 'copy-text';
 export const IPC_OPEN_EXTENSION_FOLDER = 'open-extension-folder';
