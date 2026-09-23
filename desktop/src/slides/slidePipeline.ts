@@ -47,11 +47,20 @@ function hashScreenshot(base64: string): string {
  */
 export class SlidePipeline {
   private entries: SlideEntry[] = [];
+  // Kept parallel to `entries` (same index, same length) - the actual
+  // screenshot behind each live-captured entry, so the app can show what it
+  // saw on screen, not just the text/description derived from it. Never fed
+  // into a text prompt (see notesBuilder.ts) - purely for display.
+  private screenshots: string[] = [];
   private lastTextKey: string | null = null;
   private lastScreenshotHash: string | null = null;
 
   get slides(): SlideEntry[] {
     return this.entries;
+  }
+
+  get slideScreenshots(): string[] {
+    return this.screenshots;
   }
 
   async ingest(params: { offsetSec: number; text: string; screenshotBase64: string }): Promise<SlideEntry | null> {
@@ -63,6 +72,7 @@ export class SlidePipeline {
       this.lastScreenshotHash = null;
       const entry: SlideEntry = { offsetSec: params.offsetSec, content: params.text.trim(), source: 'text' };
       this.entries.push(entry);
+      this.screenshots.push(params.screenshotBase64);
       return entry;
     }
 
@@ -77,6 +87,7 @@ export class SlidePipeline {
 
     const entry: SlideEntry = { offsetSec: params.offsetSec, content: description.trim(), source: 'vision' };
     this.entries.push(entry);
+    this.screenshots.push(params.screenshotBase64);
     return entry;
   }
 

@@ -488,6 +488,20 @@ async function finalizeSession(): Promise<void> {
           raw,
         });
     console.log(`Lecture saved: ${settings.lastSubject}/${meta.folderName}`);
+
+    // The screenshots behind this session's captured slides were only ever
+    // used transiently for OCR/vision text extraction and then discarded -
+    // save them into the lecture's photo gallery too, now that its folder
+    // exists, so the user can actually see what the app captured, not just
+    // the text derived from it.
+    for (const screenshotBase64 of slidePipeline.slideScreenshots) {
+      try {
+        library.addLecturePhoto(settings.libraryPath, settings.lastSubject, meta.folderName, screenshotBase64, 'jpg');
+      } catch (err) {
+        logError('Failed to save a captured slide screenshot as a photo', err);
+      }
+    }
+
     sendToRenderer(channels.IPC_LECTURE_SAVED, meta);
   } catch (err) {
     logError('Failed to save lecture to disk', err);
