@@ -24,13 +24,17 @@ let nextKeyIndex = 0;
 // "llama-3.1-8b-instant") both 404'd with "does not exist or you do not have
 // access to it" on the same key - guessing a third name isn't worth trying
 // again. Instead, ask Groq's own /models endpoint what this specific
-// account can actually use, once per key, and go with that.
-let cachedTextModel: string | null = null;
+// account can actually use, once per key, and go with that. Cached PER KEY,
+// not globally - different Groq accounts (a multi-key setup exists
+// specifically to combine separate free accounts) can have different model
+// catalogs, so a model resolved for key A may 404 outright when a later
+// request round-robins to key B.
+const cachedTextModelByKey = new Map<string, string>();
 
 export function setGroqApiKeys(keys: string[]): void {
   apiKeys = keys.filter(Boolean);
   nextKeyIndex = 0;
-  cachedTextModel = null;
+  cachedTextModelByKey.clear();
 }
 
 export function isGroqConfigured(): boolean {
@@ -52,11 +56,11 @@ function nextKey(): string {
 
 const RETRYABLE_STATUS = new Set([429, 503]);
 
-async function resolveTextModel(): Promise<string> {
-  if (cachedTextModel) return cachedTextModel;
-  const apiKey = nextKey();
+async function resolveTextModelForKey(apiKey: string, signal?: AbortSignal): Promise<string> {
+  const cached = cachedTextModelByKey.get(apiKey);
+  if (cached) return cached;
 
-  const response = await fetch(GROQ_MODELS_URL, { headers: { Authorization: `Bearer ${apiKey}` } });
+  const response = await fetch(GROQ_MODELS_URL, { headers: { Authorization: `Bearer ${apiKey}` }, signal });
   if (!response.ok) {
     throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
   }
@@ -64,17 +68,21 @@ async function resolveTextModel(): Promise<string> {
   const ids = (data.data ?? []).map((m) => m.id);
 
   // Groq's /models catalog mixes real text chat models in with Whisper (STT),
-  // "canopylabs/orpheus-*" (TTS), and guard/moderation models, and it keeps
-  // changing - excluding known non-chat keywords already missed "orpheus"
-  // once in production: it silently became the last-resort candidates[0]
-  // pick and broke chat outright with a "requires terms acceptance" error,
-  // never even reaching the Gemini/Cloudflare fallback because the request
-  // itself was malformed for that model, not merely rate-limited. Allowlisting
-  // known chat model *families* instead is safer against catalog changes -
-  // an unrecognized family now fails resolveTextModel() loudly (which the
-  // fallback chain in notesBuilder.ts/chatReply.ts already handles) instead
-  // of silently sending real user requests to a broken model.
-  const candidates = ids.filter((id) => /(?:^|\/)(llama|gpt-oss|qwen|mixtral|gemma|deepseek)/i.test(id));
+  // "canopylabs/orpheus-*" (TTS), and guard/moderation models (e.g.
+  // "llama-guard-3-8b" - which the family allowlist below would otherwise
+  // still match), and it keeps changing - excluding known non-chat keywords
+  // already missed "orpheus" once in production: it silently became the
+  // last-resort candidates[0] pick and broke chat outright with a "requires
+  // terms acceptance" error, never even reaching the Gemini/Cloudflare
+  // fallback because the request itself was malformed for that model, not
+  // merely rate-limited. Allowlisting known chat model *families*, minus an
+  // explicit guard/moderation exclusion, is safer against catalog changes -
+  // an unrecognized family now fails loudly (which the fallback chain in
+  // notesBuilder.ts/chatReply.ts already handles) instead of silently
+  // sending real user requests to a broken model.
+  const candidates = ids.filter(
+    (id) => /(?:^|\/)(llama|gpt-oss|qwen|mixtral|gemma|deepseek)/i.test(id) && !/guard|moderation/i.test(id)
+  );
   const preferred =
     candidates.find((id) => /llama-3\.[13]-(70b|8b)/i.test(id)) ??
     candidates.find((id) => /llama/i.test(id)) ??
@@ -83,7 +91,7 @@ async function resolveTextModel(): Promise<string> {
   if (!preferred) {
     throw new Error(`Groq: this account has no usable chat model (models seen: ${ids.join(', ') || 'none'}).`);
   }
-  cachedTextModel = preferred;
+  cachedTextModelByKey.set(apiKey, preferred);
   return preferred;
 }
 
@@ -133,7 +141,7 @@ export async function transcribeWithGroq(wavBuffer: Buffer): Promise<string> {
  * hinted cooldown before retrying, same as before multi-key support existed.
  */
 async function postChatCompletion(
-  body: Record<string, unknown>,
+  buildBody: (model: string) => Record<string, unknown>,
   timeoutMs: number,
   externalSignal?: AbortSignal
 ): Promise<Response> {
@@ -142,7 +150,10 @@ async function postChatCompletion(
   // A separate internal controller, same reasoning as geminiClient's
   // streamGemini - the timeout and an explicit "stop" both need to abort the
   // same fetch, but only the latter should be treated as a quiet, expected
-  // stop rather than a real failure (see streamChatWithGroq's catch).
+  // stop rather than a real failure (see streamChatWithGroq's catch). Set up
+  // BEFORE the loop below (which also resolves the model for each key) so an
+  // abort during that resolution is caught too, not just during the chat
+  // request itself.
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   const forwardAbort = () => controller.abort();
@@ -153,17 +164,33 @@ async function postChatCompletion(
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (controller.signal.aborted) break;
       const apiKey = nextKey();
+      // Resolved for THIS attempt's specific key, not a separate, earlier
+      // round-robin pick - otherwise the model checked against key A could
+      // easily end up sent to key B's account instead.
+      const model = await resolveTextModelForKey(apiKey, controller.signal);
       response = await fetch(GROQ_CHAT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildBody(model)),
         signal: controller.signal,
       });
 
       if (response.status !== 429 || attempt === maxAttempts) break;
       if (pool.length === 1) {
         const delayMs = parseRetryDelayMs(await response.clone().text());
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        // Abortable - a plain setTimeout wait ignored the user clicking Stop
+        // entirely while a single-key account waited out Groq's own hinted
+        // cooldown (which can be tens of seconds), making Stop feel dead
+        // exactly when a request is stuck retrying.
+        await new Promise<void>((resolve) => {
+          const finish = () => {
+            clearTimeout(timer);
+            controller.signal.removeEventListener('abort', finish);
+            resolve();
+          };
+          const timer = setTimeout(finish, delayMs);
+          controller.signal.addEventListener('abort', finish);
+        });
       }
     }
     return response!;
@@ -201,19 +228,18 @@ function parseMaxTokensCeiling(errorText: string): number | null {
 
 /** Same as generateTextWithGroq, but also reports whether the response was cut off by max_tokens (see notesBuilder.ts's continuation loop). */
 export async function generateTextWithGroqFinish(prompt: string, maxTokens?: number): Promise<GroqResult> {
-  const model = await resolveTextModel();
-  const body = (tokens?: number) => ({
+  const buildBody = (tokens?: number) => (model: string) => ({
     model,
     messages: [{ role: 'user', content: prompt }],
     ...(tokens ? { max_tokens: tokens } : {}),
   });
-  let response = await postChatCompletion(body(maxTokens), 30_000);
+  let response = await postChatCompletion(buildBody(maxTokens), 30_000);
 
   if (!response.ok && response.status === 400 && maxTokens) {
     const errorText = await response.clone().text();
     const ceiling = parseMaxTokensCeiling(errorText);
     if (ceiling && ceiling < maxTokens) {
-      response = await postChatCompletion(body(ceiling), 30_000);
+      response = await postChatCompletion(buildBody(ceiling), 30_000);
     }
   }
 
@@ -240,8 +266,7 @@ export async function streamChatWithGroq(
 ): Promise<string> {
   let full = '';
   try {
-    const model = await resolveTextModel();
-    const response = await postChatCompletion({ model, messages, stream: true }, 45_000, externalSignal);
+    const response = await postChatCompletion((model) => ({ model, messages, stream: true }), 45_000, externalSignal);
 
     if (!response.ok || !response.body) {
       throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);

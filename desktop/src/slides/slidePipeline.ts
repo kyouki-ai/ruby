@@ -96,6 +96,11 @@ export class SlidePipeline {
     const summary = await generateWithDocument(FILE_PROMPT, base64Data, mimeType);
     const entry: SlideEntry = { offsetSec, content: summary.trim(), source: 'file' };
     this.entries.push(entry);
+    // Keeps the "same index, same length" invariant documented above - an
+    // empty placeholder, not the raw file itself (which may be a PDF, not a
+    // JPEG the rest of the app assumes for a "screenshot"). Consumers already
+    // need to skip falsy entries here (see main.ts's photo-saving loop).
+    this.screenshots.push('');
     return entry;
   }
 }

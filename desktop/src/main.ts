@@ -114,14 +114,42 @@ let liveNotesMarkdown = '';
 let lastChunkTranscriptIndex = 0;
 let lastChunkSlideIndex = 0;
 let lastChunkMarkedMomentIndex = 0;
-let liveChunkBuildInFlight = false;
+// The in-flight chunk-build promise, if any - not just a boolean, so a
+// forced caller (finalizeSession, catching up the tail end) can actually
+// AWAIT the same call instead of silently no-op'ing when one is already
+// running, which used to drop the last minute of a lecture whenever "Stop"
+// landed while a periodic chunk build was mid-flight.
+let liveChunkInFlightPromise: Promise<void> | null = null;
+// Bumped on every resetLectureState() call (i.e. every new session). A chunk
+// build captures this before its AI call and checks it again after - if a
+// new session has started in the meantime (the previous one's build was
+// still in flight when the user started another recording), the stray
+// result is discarded instead of being spliced into the NEW session's
+// liveNotesMarkdown/indices.
+let liveChunkGeneration = 0;
 let autosaveTimer: ReturnType<typeof setInterval> | null = null;
 // A confirmed-correct excerpt from this lecture's first chunk, reused as a
 // language reference for every later chunk - a short chunk occasionally
 // comes back mistranscribed entirely into the wrong language with no
 // surrounding context to correct it, which used to make an isolated part of
 // the notes switch language for no real reason (see buildLectureNotesChunk).
+// Pre-seeded from the existing raw transcript when continuing an
+// already-recorded lecture, instead of starting blank every session.
 let languageAnchor: string | null = null;
+// True when targetLectureFolder points at a lecture that was already
+// genuinely recorded before this session (has real prior content) - as
+// opposed to a placeholder (this session's own, or an empty one created via
+// the calendar/schedule and picked as the recording target before ever
+// being recorded into). Affects whether the first live chunk announces
+// itself as starting a new lecture, and whether finalizeSession merges with
+// a "## Продолжение записи" header or just overwrites cleanly.
+let isContinuationOfExistingLecture = false;
+// Pinned once per session at startNewSession, instead of re-reading the
+// live `settings.lastSubject` throughout - the user can switch/create a
+// subject from the History tab while a recording keeps running in the
+// background, which must not misdirect where this session's autosave/final
+// save land.
+let sessionSubject = '';
 // Lets the renderer's "Stop" button interrupt an in-flight chat reply.
 let currentChatAbortController: AbortController | null = null;
 
@@ -335,8 +363,15 @@ function resetLectureState(): void {
   lastChunkTranscriptIndex = 0;
   lastChunkSlideIndex = 0;
   lastChunkMarkedMomentIndex = 0;
-  liveChunkBuildInFlight = false;
+  liveChunkInFlightPromise = null;
+  liveChunkGeneration++;
   languageAnchor = null;
+  isContinuationOfExistingLecture = false;
+  // Otherwise a genuinely new call-out/assignment announcement in a new
+  // session started within the throttle window of the PREVIOUS session's
+  // last notification gets silently suppressed as if it were a duplicate.
+  lastCallOutNotifiedAt = 0;
+  lastAssignmentNotifiedAt = 0;
   stopAutosave();
   audioPipeline = new AudioPipeline({
     onSegment: (segment) => {
@@ -374,12 +409,19 @@ function stopAutosave(): void {
  * chunk and appends them to liveNotesMarkdown (in memory + pushed to the
  * renderer for a live preview - disk persistence is autosaveTick's job
  * below, deliberately kept separate, see saveSessionRecovery). Safe to call
- * opportunistically (autosaveTick) or forced (finalizeSession, to catch up
- * the tail end) - a no-op if there's nothing new, or if a previous call is
- * still in flight.
+ * opportunistically (autosaveTick) or forced (finalizeSession/manual slide
+ * attach, to catch up immediately) - a no-op if there's nothing new. If a
+ * previous call is still in flight, `force` AWAITS it instead of returning
+ * immediately - a forced caller needs the result actually incorporated
+ * before it moves on (finalizeSession used to silently skip the last
+ * minute's worth of content when a periodic build was still running the
+ * moment the user hit Stop).
  */
 async function buildNextLiveChunkIfDue(force: boolean): Promise<void> {
-  if (liveChunkBuildInFlight) return;
+  if (liveChunkInFlightPromise) {
+    if (force) await liveChunkInFlightPromise;
+    return;
+  }
   const newTranscript = transcript.slice(lastChunkTranscriptIndex);
   const newSlides = slidePipeline.slides.slice(lastChunkSlideIndex);
   if (newTranscript.length === 0 && newSlides.length === 0) return;
@@ -388,7 +430,8 @@ async function buildNextLiveChunkIfDue(force: boolean): Promise<void> {
   if (!force && newChars < CHUNK_MIN_NEW_CHARS && newSlides.length === 0) return;
 
   const newMarkedMoments = markedMoments.slice(lastChunkMarkedMomentIndex);
-  const isFirstChunk = lastChunkTranscriptIndex === 0 && lastChunkSlideIndex === 0;
+  const isFirstChunk =
+    !isContinuationOfExistingLecture && lastChunkTranscriptIndex === 0 && lastChunkSlideIndex === 0;
   // Snapshot the boundary now, not after the await below - onSegment keeps
   // pushing to `transcript` while this request is in flight, and those newer
   // segments must stay unconsumed for the next chunk, not get silently
@@ -396,26 +439,35 @@ async function buildNextLiveChunkIfDue(force: boolean): Promise<void> {
   const consumedTranscriptIndex = transcript.length;
   const consumedSlideIndex = slidePipeline.slides.length;
   const consumedMarkedMomentIndex = markedMoments.length;
+  const myGeneration = liveChunkGeneration;
 
-  liveChunkBuildInFlight = true;
-  try {
-    const chunkMarkdown = await buildLectureNotesChunk(newTranscript, newSlides, newMarkedMoments, isFirstChunk, languageAnchor);
-    if (!languageAnchor) {
-      languageAnchor = newTranscript
-        .map((s) => s.text)
-        .join(' ')
-        .slice(0, 300);
+  liveChunkInFlightPromise = (async () => {
+    try {
+      const chunkMarkdown = await buildLectureNotesChunk(newTranscript, newSlides, newMarkedMoments, isFirstChunk, languageAnchor);
+      // A new session started (resetLectureState bumped the generation)
+      // while this call was in flight - the result belongs to a lecture
+      // that's no longer the current one, so discard it instead of
+      // splicing stale content/indices into whatever's recording now.
+      if (myGeneration !== liveChunkGeneration) return;
+      if (!languageAnchor && newTranscript.length > 0) {
+        languageAnchor = newTranscript
+          .map((s) => s.text)
+          .join(' ')
+          .slice(0, 300);
+      }
+      liveNotesMarkdown = liveNotesMarkdown ? `${liveNotesMarkdown}\n${chunkMarkdown}` : chunkMarkdown;
+      lastChunkTranscriptIndex = consumedTranscriptIndex;
+      lastChunkSlideIndex = consumedSlideIndex;
+      lastChunkMarkedMomentIndex = consumedMarkedMomentIndex;
+      sendToRenderer(channels.IPC_NOTES_UPDATED, liveNotesMarkdown);
+    } catch (err) {
+      logError('Failed to build a live notes chunk during recording', err);
+    } finally {
+      liveChunkInFlightPromise = null;
     }
-    liveNotesMarkdown = liveNotesMarkdown ? `${liveNotesMarkdown}\n${chunkMarkdown}` : chunkMarkdown;
-    lastChunkTranscriptIndex = consumedTranscriptIndex;
-    lastChunkSlideIndex = consumedSlideIndex;
-    lastChunkMarkedMomentIndex = consumedMarkedMomentIndex;
-    sendToRenderer(channels.IPC_NOTES_UPDATED, liveNotesMarkdown);
-  } catch (err) {
-    logError('Failed to build a live notes chunk during recording', err);
-  } finally {
-    liveChunkBuildInFlight = false;
-  }
+  })();
+
+  await liveChunkInFlightPromise;
 }
 
 async function autosaveTick(): Promise<void> {
@@ -425,7 +477,7 @@ async function autosaveTick(): Promise<void> {
     // A separate recovery file, not raw.json/notes.md directly - see
     // saveSessionRecovery's own comment for why writing the real files
     // this early would be unsafe for a "continuation" recording.
-    library.saveSessionRecovery(settings.libraryPath, settings.lastSubject, targetLectureFolder, {
+    library.saveSessionRecovery(settings.libraryPath, sessionSubject, targetLectureFolder, {
       markdown: liveNotesMarkdown,
       raw: { transcript, slides: slidePipeline.slides, assignments },
     });
@@ -438,6 +490,7 @@ async function autosaveTick(): Promise<void> {
 function startNewSession(tabTitle: string, tabUrl: string): void {
   resetLectureState();
   currentSession = { tabTitle, tabUrl, startedAt: Date.now() };
+  sessionSubject = settings.lastSubject;
 
   // Give this session its own lecture folder immediately instead of only at
   // the end - it's what autosaveTick/buildNextLiveChunkIfDue write into
@@ -448,7 +501,7 @@ function startNewSession(tabTitle: string, tabUrl: string): void {
   // and this session's material belongs there instead.
   if (!targetLectureFolder) {
     try {
-      const meta = library.saveLecture(settings.libraryPath, settings.lastSubject, {
+      const meta = library.saveLecture(settings.libraryPath, sessionSubject, {
         title: tabTitle || 'Lecture',
         sourceUrl: tabUrl,
         durationSec: 0,
@@ -459,6 +512,17 @@ function startNewSession(tabTitle: string, tabUrl: string): void {
     } catch (err) {
       logError('Failed to create a placeholder lecture at recording start', err);
     }
+  }
+
+  // Continuing a lecture that genuinely already has content (not just a
+  // placeholder - see IPC_SET_RECORDING_TARGET) means this session's first
+  // chunk isn't the start of a new lecture, and there's already a
+  // confirmed-correct language sample to anchor to instead of starting blank.
+  isContinuationOfExistingLecture = Boolean(targetLectureFolder) && !targetIsFreshPlaceholder;
+  if (isContinuationOfExistingLecture && targetLectureFolder) {
+    const priorRaw = library.loadLectureRaw(settings.libraryPath, sessionSubject, targetLectureFolder);
+    const priorText = priorRaw?.transcript.map((s) => s.text).join(' ') ?? '';
+    if (priorText) languageAnchor = priorText.slice(0, 300);
   }
 
   sendToRenderer(channels.IPC_CONNECTION_STATUS, true, tabTitle);
@@ -621,37 +685,39 @@ async function finalizeSession(): Promise<void> {
   const raw = { transcript, slides: slidePipeline.slides, assignments };
 
   try {
-    const meta =
-      targetIsFreshPlaceholder && targetLectureFolder
-        ? library.finalizeLiveLecture(settings.libraryPath, settings.lastSubject, targetLectureFolder, {
-            title: currentSession.tabTitle || 'Lecture',
-            sourceUrl: currentSession.tabUrl,
-            durationSec,
-            markdown,
-            notesFailed,
-            raw,
-          })
-        : targetLectureFolder
-          ? library.appendToLecture(
-              settings.libraryPath,
-              settings.lastSubject,
-              targetLectureFolder,
-              markdown,
-              durationSec,
-              currentSession.tabTitle || 'Lecture',
-              notesFailed,
-              raw
-            )
-          : library.saveLecture(settings.libraryPath, settings.lastSubject, {
-              title: currentSession.tabTitle || 'Lecture',
-              sourceUrl: currentSession.tabUrl,
-              durationSec,
-              markdown,
-              notesFailed,
-              raw,
-            });
-    console.log(`Lecture saved: ${settings.lastSubject}/${meta.folderName}`);
-    library.clearSessionRecovery(settings.libraryPath, settings.lastSubject, meta.folderName);
+    let meta: library.LectureMeta;
+    if (targetIsFreshPlaceholder && targetLectureFolder) {
+      meta = library.finalizeLiveLecture(settings.libraryPath, sessionSubject, targetLectureFolder, {
+        title: currentSession.tabTitle || 'Lecture',
+        sourceUrl: currentSession.tabUrl,
+        durationSec,
+        markdown,
+        notesFailed,
+        raw,
+      });
+    } else if (targetLectureFolder) {
+      meta = library.appendToLecture(
+        settings.libraryPath,
+        sessionSubject,
+        targetLectureFolder,
+        markdown,
+        durationSec,
+        currentSession.tabTitle || 'Lecture',
+        notesFailed,
+        raw
+      );
+    } else {
+      meta = library.saveLecture(settings.libraryPath, sessionSubject, {
+        title: currentSession.tabTitle || 'Lecture',
+        sourceUrl: currentSession.tabUrl,
+        durationSec,
+        markdown,
+        notesFailed,
+        raw,
+      });
+    }
+    console.log(`Lecture saved: ${sessionSubject}/${meta.folderName}`);
+    library.clearSessionRecovery(settings.libraryPath, sessionSubject, meta.folderName);
 
     // The screenshots behind this session's captured slides were only ever
     // used transiently for OCR/vision text extraction and then discarded -
@@ -659,8 +725,9 @@ async function finalizeSession(): Promise<void> {
     // exists, so the user can actually see what the app captured, not just
     // the text derived from it.
     for (const screenshotBase64 of slidePipeline.slideScreenshots) {
+      if (!screenshotBase64) continue; // a manually-attached file has no screenshot - see ingestFile
       try {
-        library.addLecturePhoto(settings.libraryPath, settings.lastSubject, meta.folderName, screenshotBase64, 'jpg');
+        library.addLecturePhoto(settings.libraryPath, sessionSubject, meta.folderName, screenshotBase64, 'jpg');
       } catch (err) {
         logError('Failed to save a captured slide screenshot as a photo', err);
       }
@@ -675,6 +742,7 @@ async function finalizeSession(): Promise<void> {
     // in-app picker that would otherwise reset this (see IPC_SET_RECORDING_TARGET).
     targetLectureFolder = null;
     targetIsFreshPlaceholder = false;
+    isContinuationOfExistingLecture = false;
   }
 }
 
@@ -713,7 +781,14 @@ function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_WINDOW_CLOSE, () => mainWindow?.close());
 
   // In-app microphone recording - no browser/extension involved at all.
+  // Guarded the same way the extension's "hello" handler already is: without
+  // this, a double-fire (double click, an IPC replay) while a recording is
+  // already active would swap in a brand-new AudioPipeline/transcript mid-
+  // session - the OLD pipeline's already-queued chunks keep resolving into
+  // whatever (now reset) module state is current, silently mixing stale
+  // audio from the abandoned session into the new one's notes.
   ipcMain.handle(channels.IPC_START_MIC_SESSION, () => {
+    if (currentSession) return;
     startNewSession('Микрофон (офлайн-лекция)', '');
   });
   ipcMain.handle(
@@ -748,14 +823,13 @@ function setupIpcHandlers(): void {
     sendToRenderer(channels.IPC_SLIDE_ADDED, entry);
 
     // A manually attached file is a deliberate one-off action, unlike the
-    // steady trickle of live slide captures - rebuild immediately instead of
-    // waiting for the usual debounce.
-    try {
-      const markdown = await buildLectureNotes(transcript, slidePipeline.slides, markedMoments);
-      sendToRenderer(channels.IPC_NOTES_UPDATED, markdown);
-    } catch (err) {
-      logError('Failed to rebuild notes after attaching file', err);
-    }
+    // steady trickle of live slide captures - fold it into the same
+    // incremental live-chunk pipeline everything else during recording goes
+    // through (forced, so it happens immediately instead of waiting for the
+    // usual debounce), rather than a separate one-shot whole-transcript
+    // rebuild - that used to get silently overwritten by the very next
+    // periodic chunk, which knew nothing about it.
+    await buildNextLiveChunkIfDue(true);
 
     return entry;
   });
@@ -997,7 +1071,14 @@ function setupIpcHandlers(): void {
   });
   ipcMain.handle(channels.IPC_SET_RECORDING_TARGET, (_e, folderName: string | null) => {
     targetLectureFolder = folderName;
-    targetIsFreshPlaceholder = false; // an explicit pick is always a real continuation, never "fresh"
+    // A folder that already exists but was never actually recorded into yet
+    // (e.g. a lecture card the calendar/schedule created ahead of time, then
+    // immediately picked as the recording target) is functionally the same
+    // as a session-created placeholder - its first real content should
+    // overwrite it cleanly, not get merged in behind a "## Продолжение
+    // записи" header as if some earlier session had already recorded here.
+    const meta = folderName ? library.loadLectureMeta(settings.libraryPath, settings.lastSubject, folderName) : null;
+    targetIsFreshPlaceholder = Boolean(meta && meta.durationSec === 0);
   });
   ipcMain.handle(channels.IPC_CHOOSE_LIBRARY_FOLDER, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] });

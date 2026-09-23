@@ -6,9 +6,24 @@ function mondayFirstDayOf(date: Date): number {
   return (date.getDay() + 6) % 7;
 }
 
+/**
+ * `date.toISOString()` reports the UTC date, not the user's local one - for
+ * anyone east of UTC (Russia included), the local calendar date a "once"
+ * schedule entry was picked for can still show the PREVIOUS day in UTC for
+ * the first few hours after local midnight, so comparing against it made
+ * the entry miss its own valid day (or match the wrong one) during that
+ * window.
+ */
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function occursOn(entry: ScheduleEntry, now: Date): boolean {
   if (entry.type === 'weekly') return entry.dayOfWeek === mondayFirstDayOf(now);
-  return entry.date === now.toISOString().slice(0, 10);
+  return entry.date === localDateKey(now);
 }
 
 function startTimeToday(entry: ScheduleEntry, now: Date): Date {
@@ -28,7 +43,7 @@ export function startScheduleNotifier(getEntries: () => ScheduleEntry[], onClick
   timer = setInterval(() => {
     if (!Notification.isSupported()) return;
     const now = new Date();
-    const todayKey = now.toISOString().slice(0, 10);
+    const todayKey = localDateKey(now);
 
     for (const entry of getEntries()) {
       if (!occursOn(entry, now)) continue;

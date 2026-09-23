@@ -1,10 +1,6 @@
-import { generateText, generateTextWithFinish, isApiKeyConfigured } from './geminiClient';
-import { generateTextWithGroq, generateTextWithGroqFinish, isGroqConfigured } from '../groq/groqClient';
-import {
-  generateTextWithCloudflare,
-  generateTextWithCloudflareFinish,
-  isCloudflareConfigured,
-} from '../cloudflare/cloudflareClient';
+import { generateTextWithFinish, isApiKeyConfigured } from './geminiClient';
+import { generateTextWithGroqFinish, isGroqConfigured } from '../groq/groqClient';
+import { generateTextWithCloudflareFinish, isCloudflareConfigured } from '../cloudflare/cloudflareClient';
 import { tryProviders } from '../ai/providerChain';
 import { TranscriptSegment } from '../transcription/audioPipeline';
 import { SlideEntry } from '../slides/slidePipeline';
@@ -39,14 +35,6 @@ const MAX_CONTINUATION_TAIL_CHARS = 6000;
  * doesn't fail the request as long as another is configured. Falls straight
  * to whichever of these the user actually set up if not all three are.
  */
-function generateTextRouted(prompt: string, maxTokens?: number): Promise<string> {
-  return tryProviders([
-    { name: 'Groq', configured: isGroqConfigured(), call: () => generateTextWithGroq(prompt, maxTokens) },
-    { name: 'Gemini', configured: isApiKeyConfigured(), call: () => generateText(prompt, maxTokens) },
-    { name: 'Cloudflare', configured: isCloudflareConfigured(), call: () => generateTextWithCloudflare(prompt, maxTokens) },
-  ]);
-}
-
 function generateTextRoutedWithFinish(prompt: string, maxTokens?: number): Promise<{ text: string; truncated: boolean }> {
   return tryProviders([
     { name: 'Groq', configured: isGroqConfigured(), call: () => generateTextWithGroqFinish(prompt, maxTokens) },
@@ -70,7 +58,19 @@ async function generateLongText(prompt: string, maxTokens: number): Promise<stri
   let currentPrompt = prompt;
 
   for (let round = 0; round <= MAX_CONTINUATIONS; round++) {
-    const { text, truncated } = await generateTextRoutedWithFinish(currentPrompt, maxTokens);
+    let text: string;
+    let truncated: boolean;
+    try {
+      ({ text, truncated } = await generateTextRoutedWithFinish(currentPrompt, maxTokens));
+    } catch (err) {
+      // A later continuation round failing (every configured provider
+      // exhausted for that one call) must not throw away whatever earlier
+      // rounds already wrote successfully - a mostly-finished "Подробно"
+      // conspect is worth far more than nothing. Only propagate the failure
+      // when there's truly nothing to fall back to (round 0 itself failed).
+      if (full) break;
+      throw err;
+    }
     full += (full && text ? '\n' : '') + text;
     if (!truncated) break;
 
@@ -112,8 +112,18 @@ function buildChunkPrompt(
   isFirstChunk: boolean,
   languageAnchor: string | null
 ): string {
-  const transcriptText = transcript.map((seg) => `[${formatTimestamp(seg.startSec)}] ${seg.text}`).join('\n');
-  const slidesText = slides.map((slide) => `[${formatTimestamp(slide.offsetSec)}] ${slide.content}`).join('\n\n');
+  // Normally tiny (gated by CHUNK_MIN_NEW_CHARS upstream), but a forced catch-up
+  // call (finalizeSession, or many consecutive failed chunk attempts) can hand
+  // this an unbounded backlog spanning a large chunk of the lecture - capping
+  // it the same way the whole-transcript buildPrompt below does avoids
+  // reintroducing the exact "one huge uncapped request" problem the chunked
+  // rewrite exists to get away from.
+  const { transcriptText: cappedTranscriptText, slidesText: cappedSlidesText } = capSourceText(
+    transcript.map((seg) => `[${formatTimestamp(seg.startSec)}] ${seg.text}`).join('\n'),
+    slides.map((slide) => `[${formatTimestamp(slide.offsetSec)}] ${slide.content}`).join('\n\n')
+  );
+  const transcriptText = cappedTranscriptText;
+  const slidesText = cappedSlidesText;
   const markedText = markedMoments.map((m) => `[${formatTimestamp(m.offsetSec)}] ${m.text}`).join('\n');
 
   // Each chunk is transcribed independently, and a short chunk occasionally
@@ -285,9 +295,19 @@ const QUIZ_PROMPT_PREFIX =
   'Пиши по-русски, в markdown, без преамбулы.\n\n' +
   'КОНСПЕКТ:\n';
 
+// Quiz/flashcard generation used to call generateTextRouted with no maxTokens
+// and no continuation loop - a cut-off response (finish_reason=length) was
+// silently returned as the final answer, which for flashcards also breaks
+// parseFlashcardPairs's JSON parse outright. A long "Подробно" conspect can
+// still legitimately produce a long-enough quiz/flashcard set to hit a
+// provider's default cap, so both get the same generateLongText safety net
+// buildLectureNotes already has instead of opting each caller in by hand.
+const QUIZ_MAX_TOKENS = 2000;
+const FLASHCARD_MAX_TOKENS = 3000;
+
 /** A short self-check quiz generated from a saved lecture's notes - available any time after saving, not just once. */
 export function generateQuizFromNotes(markdown: string): Promise<string> {
-  return generateTextRouted(QUIZ_PROMPT_PREFIX + (capNotesForPrompt(markdown) || '(конспект пуст)'));
+  return generateLongText(QUIZ_PROMPT_PREFIX + (capNotesForPrompt(markdown) || '(конспект пуст)'), QUIZ_MAX_TOKENS);
 }
 
 const FLASHCARD_PROMPT_PREFIX =
@@ -326,6 +346,9 @@ function parseFlashcardPairs(raw: string): FlashcardPair[] {
 
 /** Generates front/back flashcard pairs from a saved lecture's notes - the caller (main.ts) turns these into scheduled Flashcard records. */
 export async function generateFlashcardPairsFromNotes(markdown: string): Promise<FlashcardPair[]> {
-  const raw = await generateTextRouted(FLASHCARD_PROMPT_PREFIX + (capNotesForPrompt(markdown) || '(конспект пуст)'));
+  const raw = await generateLongText(
+    FLASHCARD_PROMPT_PREFIX + (capNotesForPrompt(markdown) || '(конспект пуст)'),
+    FLASHCARD_MAX_TOKENS
+  );
   return parseFlashcardPairs(raw);
 }

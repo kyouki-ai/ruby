@@ -364,6 +364,11 @@ export function loadLectureMarkdown(libraryPath: string, subject: string, folder
   return fs.readFileSync(notesPath(path.join(libraryPath, subject, folderName)), 'utf-8');
 }
 
+/** A single lecture's metadata, or null if the folder doesn't exist/has no meta.json yet. */
+export function loadLectureMeta(libraryPath: string, subject: string, folderName: string): LectureMeta | null {
+  return readMeta(path.join(libraryPath, subject), folderName, subject);
+}
+
 /** Overwrites just the markdown body - used when the user edits a note by hand, or after a notes rebuild. */
 export function saveLectureMarkdown(
   libraryPath: string,

@@ -81,24 +81,23 @@ export async function streamChatWithCloudflare(
   externalSignal?: AbortSignal
 ): Promise<string> {
   let full = '';
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45_000);
-    const forwardAbort = () => controller.abort();
-    externalSignal?.addEventListener('abort', forwardAbort);
+  // The timeout/abort wiring must stay live for the WHOLE call, not just the
+  // initial fetch - it used to be cleared in an inner finally right after
+  // fetch() resolved (headers received, stream just starting), which meant a
+  // stream that then hung had no timeout to abort it, and clicking "Stop"
+  // mid-stream did nothing (the listener was already removed).
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45_000);
+  const forwardAbort = () => controller.abort();
+  externalSignal?.addEventListener('abort', forwardAbort);
 
-    let response: Response;
-    try {
-      response = await fetch(chatUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${credentials!.apiToken}` },
-        body: JSON.stringify({ model: CHAT_MODEL, messages, stream: true }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-      externalSignal?.removeEventListener('abort', forwardAbort);
-    }
+  try {
+    const response = await fetch(chatUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${credentials!.apiToken}` },
+      body: JSON.stringify({ model: CHAT_MODEL, messages, stream: true }),
+      signal: controller.signal,
+    });
 
     if (!response.ok || !response.body) {
       throw new Error(`Cloudflare request failed: ${response.status} ${await response.text()}`);
@@ -137,5 +136,8 @@ export async function streamChatWithCloudflare(
   } catch (err) {
     if (externalSignal?.aborted) return full;
     throw err;
+  } finally {
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', forwardAbort);
   }
 }
