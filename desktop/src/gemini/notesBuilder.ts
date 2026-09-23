@@ -18,6 +18,12 @@ export type NotesDetailLevel = 'concise' | 'detailed';
 // text) and asks the model to continue, stitching the pieces together
 // instead of just accepting a truncated document.
 const DETAILED_MAX_TOKENS = 8000;
+// "Кратко" is a shorter target, not an excuse to skip the same safety net -
+// a long lecture's concise summary can still legitimately run past whatever
+// a given provider/model defaults to (and some auto-picked free-tier models
+// cap a single response at only a few hundred tokens), which previously cut
+// the notes off mid-sentence with no way to recover the rest.
+const CONCISE_MAX_TOKENS = 3000;
 const MAX_CONTINUATIONS = 5;
 // The tail, not the whole accumulated document, is resent on each continuation
 // round - the model only needs to see where it left off to keep going. Without
@@ -176,7 +182,7 @@ export async function buildLectureNotes(
   detailLevel: NotesDetailLevel = 'concise'
 ): Promise<string> {
   const prompt = buildPrompt(transcript, slides, markedMoments, detailLevel);
-  return detailLevel === 'detailed' ? generateLongText(prompt, DETAILED_MAX_TOKENS) : generateTextRouted(prompt);
+  return generateLongText(prompt, detailLevel === 'detailed' ? DETAILED_MAX_TOKENS : CONCISE_MAX_TOKENS);
 }
 
 // Some auto-picked Groq models (see groqClient.ts's resolveTextModel) have a
