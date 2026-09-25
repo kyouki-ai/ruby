@@ -15,6 +15,13 @@ export interface AssignmentEntry {
 }
 
 const ASSIGNMENT_PHRASES = [
+  // Word roots covering every common inflection/colloquial form - "домашнюю
+  // вам задам", "домашка", "домашки" etc. all matched a real lecture where
+  // the fixed phrase "домашнее задание" below did not, since ASR output and
+  // natural speech rarely land on that exact two-word order.
+  'домашн',
+  'домашк',
+  // Homework / for-later phrasing.
   'домашнее задание',
   'дз будет',
   'дз на',
@@ -44,6 +51,29 @@ const ASSIGNMENT_PHRASES = [
   'сдать до',
   'подготовьте к',
   'принесите на следующ',
+  // In-class, right-now task phrasing - previously missed entirely, since
+  // every phrase above assumes the task is for later, not for this session.
+  'решите сейчас',
+  'попробуйте решить',
+  'попробуйте самостоятельно',
+  'попробуйте сами',
+  'давайте решим',
+  'давайте порешаем',
+  'разберём задачу',
+  'разберите задачу',
+  'запишите задачу',
+  'запишите условие',
+  'откройте тетрад',
+  'возьмите листочек',
+  'возьмите листок',
+  'приступайте к решению',
+  'приступаем к решению',
+  'начинайте решать',
+  'вот задача',
+  'перед вами задача',
+  'следующая задача',
+  'даю вам ',
+  'на решение ',
 ];
 
 export function detectAssignmentPhrase(text: string): boolean {

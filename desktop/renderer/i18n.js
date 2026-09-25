@@ -175,6 +175,7 @@ const TRANSLATIONS = {
     'live.silenceDismiss': 'Это перерыв, не останавливай',
 
     'assignments.detectedHead': 'Обнаруженные задания',
+    'assignments.getHelp': 'Получить помощь',
     'assignments.copy': 'Копировать',
     'assignments.copied': 'Скопировано',
     'assignments.slideHint': '+ слайд с этого момента',
@@ -445,6 +446,7 @@ const TRANSLATIONS = {
     'live.silenceDismiss': "It's a break, don't stop",
 
     'assignments.detectedHead': 'Detected assignments',
+    'assignments.getHelp': 'Get help',
     'assignments.copy': 'Copy',
     'assignments.copied': 'Copied',
     'assignments.slideHint': "+ that moment's slide",

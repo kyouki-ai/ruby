@@ -147,7 +147,7 @@ ${
     : "This is the NEXT segment, continuing directly after material you already wrote notes for (which you can no longer see) - do not reintroduce the lecture, do not summarize what came before, just keep documenting from here as if this were the next part of the same ongoing document."
 }
 
-Write a thorough writeup of just THIS segment - full sentences and paragraphs, not compressed bullet fragments, keeping the reasoning/examples/context the speaker gave. Use "## " headings only for a genuinely NEW topic that starts within this segment - if it's a continuation of the same topic as before, don't add a heading, just keep writing under it. Bold important terms/definitions. Include a "[mm:ss]" timestamp next to each bullet/section. Write formulas as LaTeX ($...$ or $$...$$). ${languageInstruction}
+Write a thorough writeup of just THIS segment - full sentences and paragraphs, not compressed bullet fragments, keeping the reasoning/examples/context the speaker gave. This means don't compress real substance down to a one-line bullet - it does NOT mean transcribing everything verbatim: skip pure verbal filler (small talk, verbal tics like "так", "вот", "ну", repeated/restarted phrases, off-topic tangents, purely organizational remarks like "так, идём дальше" or "хорошо, давайте посмотрим") - none of that belongs in the notes regardless of detail level. Use "## " headings only for a genuinely NEW topic that starts within this segment - if it's a continuation of the same topic as before, don't add a heading, just keep writing under it. Bold important terms/definitions. Include a "[mm:ss]" timestamp next to each bullet/section. Write formulas as LaTeX ($...$ or $$...$$). ${languageInstruction}
 ${markedMoments.length > 0 ? '- The student flagged some moments in this segment as important - mark each with "⭐" at the start of that bullet/section.' : ''}
 
 NEW SPEECH SEGMENT:
@@ -235,7 +235,8 @@ function buildPrompt(
     detailLevel === 'detailed'
       ? `- Write a thorough, comprehensive writeup, not a compressed summary - aim for something on the order of a 10-page document if the lecture material supports it. Go section by section and actually explain each point in full sentences and paragraphs (not just short bullet fragments), keeping the reasoning, examples, and context the speaker gave rather than trimming them away.
 - Still use "## " headings to organize sections and bullet lists where they genuinely help (e.g. enumerations, step lists), but don't compress explanations that deserve real paragraphs down to a single bullet line.
-- Do not pad with filler or repeat yourself just to be longer - length should come from genuinely covering everything in the transcript in depth, not from padding.`
+- Do not pad with filler or repeat yourself just to be longer - length should come from genuinely covering everything in the transcript in depth, not from padding.
+- "Thorough" is about not compressing real substance, not about transcribing everything verbatim: skip the speaker's own verbal filler too - small talk, verbal tics ("так", "вот", "ну"), repeated/restarted phrases, off-topic tangents, purely organizational remarks ("так, идём дальше", "хорошо, давайте посмотрим") - none of that belongs in the notes just because "Подробно" asks for depth.`
       : `- Use bullet points for key ideas, not full transcript sentences.
 - Skip filler, small talk, and repeated words from the speech.`;
 

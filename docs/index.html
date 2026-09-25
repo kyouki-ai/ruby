@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ruby — конспект лекций, который пишется сам</title>
-<meta name="description" content="Ruby записывает звук лекции — с микрофона или прямо в браузере — и превращает его в аккуратный markdown-конспект с помощью Gemini. Бесплатно, на твоём собственном ключе.">
+<meta name="description" content="Ruby записывает звук лекции — с микрофона или прямо в браузере — и превращает его в аккуратный markdown-конспект с помощью ИИ (Groq, Gemini). Бесплатно, на твоих собственных ключах.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -188,7 +188,7 @@
 
     <p class="reveal" style="margin-top: 28px; font-size: 17px; line-height: 1.72; color: var(--ink-soft); max-width: 540px;">
       Ruby записывает звук лекции — с микрофона или прямо в браузере — и превращает его в аккуратный
-      markdown-конспект: заголовки, буллеты, таймкоды. Бесплатно, на твоём собственном Gemini-ключе.
+      markdown-конспект: заголовки, буллеты, таймкоды. Бесплатно, на твоих собственных ключах (Groq, Gemini).
     </p>
 
     <div class="reveal" style="margin-top: 32px; display: flex; align-items: center; gap: 28px; flex-wrap: wrap;">
@@ -199,7 +199,7 @@
       <a href="#how" class="mono" style="font-size: 13px; text-decoration: underline; text-underline-offset: 3px; color: var(--ink-soft);">как это работает →</a>
       <a href="#privacy" class="mono" style="font-size: 13px; text-decoration: underline; text-underline-offset: 3px; color: var(--ink-soft);">о приватности →</a>
     </div>
-    <p class="mono reveal" style="margin-top: 22px; font-size: 11px; color: var(--ink-dim); letter-spacing: .04em;">WINDOWS 10/11 · БЕСПЛАТНО · СВОЙ GEMINI API-КЛЮЧ</p>
+    <p class="mono reveal" style="margin-top: 22px; font-size: 11px; color: var(--ink-dim); letter-spacing: .04em;">WINDOWS 10/11 · БЕСПЛАТНО · СВОЙ API-КЛЮЧ</p>
 
     <!-- Taped-in screenshot -->
     <div class="reveal" style="--r: -1.6deg; margin-top: 60px; max-width: 760px; transform: rotate(-1.6deg); position: relative;">
@@ -246,7 +246,7 @@
       <div class="index-card reveal" style="--r: -1.1deg; transform: rotate(-1.1deg);">
         <div class="card-num">01</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Живой конспект</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Слова и слайды появляются на экране прямо во время лекции — сразу видно, что запись идёт.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Конспект пишется кусками прямо во время лекции, с автосохранением каждую минуту — если приложение упадёт, ничего не потеряется.</p>
       </div>
 
       <div class="index-card reveal" style="--r: 0.8deg; transform: rotate(0.8deg);">
@@ -275,8 +275,8 @@
 
       <div class="index-card reveal" style="--r: 0.5deg; transform: rotate(0.5deg);">
         <div class="card-num">06</div>
-        <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Один бесплатный ключ</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Работает на бесплатном тарифе Gemini — без карт и подписок, только свой API-ключ.</p>
+        <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Несколько ИИ на подхвате</h3>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Основной — Groq, бесплатный и быстрый. Если он перегружен, Ruby сама переключается на Gemini, а потом на Cloudflare — лекция не срывается.</p>
       </div>
 
       <div class="index-card reveal" style="--r: -0.9deg; transform: rotate(-0.9deg);">
@@ -288,7 +288,7 @@
       <div class="index-card reveal" style="--r: 1.1deg; transform: rotate(1.1deg);">
         <div class="card-num">08</div>
         <h3 style="font-size: 15.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 8px;">Ловит домашку на слух</h3>
-        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Как только препод озвучивает задание, Ruby присылает уведомление и сохраняет момент вместе со слайдом — можно сразу скопировать в другую нейросеть.</p>
+        <p style="font-size: 13px; line-height: 1.6; color: var(--ink-soft);">Как только препод озвучивает или пишет на доске задание, Ruby присылает уведомление и сохраняет момент вместе со слайдом. Кнопка «Получить помощь» сразу разбирает задание в чате с ИИ, не останавливая запись.</p>
       </div>
 
       <div class="index-card reveal" style="--r: -0.4deg; transform: rotate(-0.4deg);">
@@ -328,7 +328,7 @@
         <div class="mono" style="font-size: 24px; color: var(--red-bright); width: 44px; flex-shrink: 0;">01</div>
         <div>
           <h3 style="font-size: 16.5px; font-family: -apple-system, sans-serif; font-weight: 700; margin-bottom: 6px;">Установи Ruby</h3>
-          <p style="font-size: 13.5px; line-height: 1.62; color: var(--ink-soft);">Скачай приложение и вставь свой бесплатный ключ с aistudio.google.com/apikey — карта не нужна.</p>
+          <p style="font-size: 13.5px; line-height: 1.62; color: var(--ink-soft);">Скачай приложение и вставь свой бесплатный ключ — Gemini с aistudio.google.com/apikey или Groq с console.groq.com/keys — карта не нужна.</p>
         </div>
       </div>
 
@@ -357,8 +357,8 @@
       <div class="mono" style="font-size: 11px; color: rgba(246,226,230,.65); letter-spacing: .08em; margin-bottom: 10px;">РАЗДЕЛ 03 · ПРИВАТНОСТЬ</div>
       <h2 style="font-size: 21px; font-weight: 620; margin-bottom: 16px; font-style: italic;">Честно о том, куда уходят данные</h2>
       <p style="font-size: 13.5px; line-height: 1.68; color: #f6e2e6; margin-bottom: 12px; font-style: italic;">
-        Звук лекции, слайды и распознанный текст уходят в Gemini API — на серверы Google — чтобы расшифровать речь
-        и собрать конспект. Это не «анонимно», и мы не делаем вид, что иначе.
+        Звук лекции, слайды и распознанный текст уходят в один из подключённых ИИ-провайдеров (Groq, Gemini
+        или Cloudflare) — чтобы расшифровать речь и собрать конспект. Это не «анонимно», и мы не делаем вид, что иначе.
       </p>
       <p style="font-size: 13.5px; line-height: 1.68; color: #f6e2e6; font-style: italic;">
         Сам конспект и ключ хранятся локально на твоём диске (ключ — в зашифрованном виде). Никакой телеметрии.

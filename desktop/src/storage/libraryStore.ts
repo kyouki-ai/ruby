@@ -225,28 +225,56 @@ export function getLibraryStats(libraryPath: string): LibraryStats {
   return { subjectCount: subjects.length, lectureCount, totalDurationSec, lastActivityDate };
 }
 
+// A subject/library-wide chat resends this same context on EVERY turn of a
+// growing conversation, unlike a one-shot notes-building call - with no cap
+// at all, this was the direct cause of real production failures: a subject
+// with a handful of "Подробно" lectures routinely produced a 34-45k token
+// request, blowing through Groq's per-minute limit (as tight as ~7000
+// tokens on some auto-picked models), Cloudflare's ~24000-token context
+// window outright, and Groq's whole daily budget within a few messages.
+// Capped the same way notesBuilder.ts caps its own prompts - losing some
+// older/less-relevant coverage beats every chat message failing outright.
+const MAX_CHAT_CONTEXT_CHARS = 18000;
+
+function capChatContext(context: string): string {
+  if (context.length <= MAX_CHAT_CONTEXT_CHARS) return context;
+  return context.slice(0, MAX_CHAT_CONTEXT_CHARS) + '\n\n…(контекст обрезан из-за ограничения модели)';
+}
+
 /** Every lecture's notes in a subject, concatenated for the AI chat's context (one lecture is just this with one entry). */
 export function buildChatContext(libraryPath: string, subject: string, onlyFolderName?: string): string {
   const lectures = listLectures(libraryPath, subject).filter((l) => !onlyFolderName || l.folderName === onlyFolderName);
 
-  return lectures
+  const combined = lectures
     .map((lecture) => {
       const markdown = loadLectureMarkdown(libraryPath, subject, lecture.folderName);
       const date = new Date(lecture.date).toLocaleDateString('ru-RU');
       return `## ${lecture.title} (${date})\n\n${markdown}`;
     })
     .join('\n\n---\n\n');
+  return capChatContext(combined);
 }
 
 /** Every lecture across every subject - the default "just ask" chat needs no folder picked first. */
 export function buildFullLibraryContext(libraryPath: string): string {
-  return listSubjects(libraryPath)
+  const combined = listSubjects(libraryPath)
     .map((subject) => {
-      const body = buildChatContext(libraryPath, subject);
+      // Uncapped per-subject on purpose - capping here too would mean a
+      // library with several subjects only ever sees content from the
+      // first one before the outer cap below kicks in.
+      const lectures = listLectures(libraryPath, subject);
+      const body = lectures
+        .map((lecture) => {
+          const markdown = loadLectureMarkdown(libraryPath, subject, lecture.folderName);
+          const date = new Date(lecture.date).toLocaleDateString('ru-RU');
+          return `## ${lecture.title} (${date})\n\n${markdown}`;
+        })
+        .join('\n\n---\n\n');
       return body ? `# Предмет: ${subject}\n\n${body}` : '';
     })
     .filter(Boolean)
     .join('\n\n===\n\n');
+  return capChatContext(combined);
 }
 
 export interface SearchResults {

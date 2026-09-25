@@ -108,11 +108,19 @@ function renderMath(expr, displayMode) {
  * inline "$...$" math is handled the same way inside inlineMarkdown. */
 function renderMarkdown(markdown) {
   const mathBlocks = [];
-  const withPlaceholders = markdown.replace(/\$\$([\s\S]+?)\$\$/g, (_m, expr) => {
-    const token = `@@MATH_BLOCK_${mathBlocks.length}@@`;
-    mathBlocks.push(renderMath(expr.trim(), true));
-    return token;
-  });
+  const extractBlockMath = (text, pattern) =>
+    text.replace(pattern, (_m, expr) => {
+      const token = `@@MATH_BLOCK_${mathBlocks.length}@@`;
+      mathBlocks.push(renderMath(expr.trim(), true));
+      return token;
+    });
+  // The prompt asks for "$$...$$", but a model occasionally reaches for the
+  // equally-valid "\[...\]" display-math delimiter instead (common in the
+  // textbook/paper LaTeX it was trained on) - rather than fight to fully
+  // control which one comes out, accept both, so a "$$" instruction that
+  // doesn't get followed still renders instead of showing raw "\[" text.
+  let withPlaceholders = extractBlockMath(markdown, /\$\$([\s\S]+?)\$\$/g);
+  withPlaceholders = extractBlockMath(withPlaceholders, /\\\[([\s\S]+?)\\\]/g);
 
   const lines = withPlaceholders.split('\n');
   let html = '';
@@ -169,11 +177,18 @@ function inlineMarkdown(text) {
   // after - escaping first would mangle LaTeX like "$a < b$" into HTML
   // entities before KaTeX ever saw the real "<".
   const mathTokens = [];
-  const withPlaceholders = text.replace(/\$([^$\n]+?)\$/g, (_m, expr) => {
-    const token = `@@MATH_INLINE_${mathTokens.length}@@`;
-    mathTokens.push(renderMath(expr.trim(), false));
-    return token;
-  });
+  const extractInlineMath = (str, pattern) =>
+    str.replace(pattern, (_m, expr) => {
+      const token = `@@MATH_INLINE_${mathTokens.length}@@`;
+      mathTokens.push(renderMath(expr.trim(), false));
+      return token;
+    });
+  // Same "\(...\)" vs "$...$" acceptance as the block-math case in
+  // renderMarkdown above - matched on the literal "\)" closing sequence, not
+  // any ")" , so an expression containing a real function call like "f(x)"
+  // doesn't end the match early.
+  let withPlaceholders = extractInlineMath(text, /\$([^$\n]+?)\$/g);
+  withPlaceholders = extractInlineMath(withPlaceholders, /\\\(([^\n]+?)\\\)/g);
   let html = escapeHtml(withPlaceholders).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   mathTokens.forEach((rendered, i) => {
     html = html.split(`@@MATH_INLINE_${i}@@`).join(rendered);
@@ -197,6 +212,27 @@ function buildAssignmentPrompt(entry) {
   return prompt;
 }
 
+/**
+ * Sends a detected assignment's prompt into Ruby's own chat (the general
+ * thread, since a live-recording assignment has no saved lecture folder to
+ * scope it to yet) and switches straight to that reply - a visible,
+ * in-app shortcut to homework help for a task the professor just announced,
+ * not a live/hidden answer feed for something the professor expects the
+ * student to answer in the moment themselves.
+ */
+async function getHelpWithAssignment(entry) {
+  const threads = await window.lectureApp.listChatThreads();
+  const general = threads.filter((th) => !th.subject && !th.folderName);
+  const thread = general.length > 0 ? await window.lectureApp.loadChatThread(general[0].id) : await window.lectureApp.createChatThread(t('chat.generalChatTitle'));
+  // Recording itself (mic AudioContext or the extension's WebSocket stream)
+  // keeps running in the main process regardless of which tab is visible -
+  // switching here never touches it. The back action just makes it easy to
+  // get back to watching the live transcript, not a safety mechanism.
+  await openChatThread(thread.id, { backAction: () => switchToTab('live') });
+  document.getElementById('chat-input').value = buildAssignmentPrompt(entry);
+  await sendChatMessage();
+}
+
 function assignmentRow(entry) {
   const row = document.createElement('div');
   row.className = 'assignment-row';
@@ -205,8 +241,12 @@ function assignmentRow(entry) {
       [${formatTimestamp(entry.offsetSec)}] ${escapeHtml(entry.text.trim())}
       ${entry.slideScreenshotBase64 ? `<div class="assignment-slide-hint">${escapeHtml(t('assignments.slideHint'))}</div>` : ''}
     </div>
-    <button class="ghost-btn assignment-copy-btn">${icon('copy', 13)}<span>${escapeHtml(t('assignments.copy'))}</span></button>
+    <div class="assignment-actions">
+      <button class="secondary-btn assignment-help-btn">${icon('chat', 13)}<span>${escapeHtml(t('assignments.getHelp'))}</span></button>
+      <button class="ghost-btn assignment-copy-btn">${icon('copy', 13)}<span>${escapeHtml(t('assignments.copy'))}</span></button>
+    </div>
   `;
+  row.querySelector('.assignment-help-btn').addEventListener('click', () => getHelpWithAssignment(entry));
   const btn = row.querySelector('.assignment-copy-btn');
   btn.addEventListener('click', async () => {
     await window.lectureApp.copyAssignmentPrompt(buildAssignmentPrompt(entry), entry.slideScreenshotBase64 || null);
