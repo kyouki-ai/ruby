@@ -226,6 +226,17 @@ function parseMaxTokensCeiling(errorText: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
+/**
+ * A flat 30s timeout was fine for chat-sized replies, but a "Подробно"
+ * conspect rebuild asks for up to DETAILED_MAX_TOKENS (8000) and can
+ * genuinely take longer than that to generate - especially in the retry loop
+ * inside postChatCompletion, which shares one timeout across every attempt.
+ * Same 1000-token threshold Gemini's client already uses for the same reason.
+ */
+function timeoutForMaxTokens(maxTokens?: number): number {
+  return maxTokens && maxTokens > 1000 ? 90_000 : 30_000;
+}
+
 /** Same as generateTextWithGroq, but also reports whether the response was cut off by max_tokens (see notesBuilder.ts's continuation loop). */
 export async function generateTextWithGroqFinish(prompt: string, maxTokens?: number): Promise<GroqResult> {
   const buildBody = (tokens?: number) => (model: string) => ({
@@ -233,13 +244,14 @@ export async function generateTextWithGroqFinish(prompt: string, maxTokens?: num
     messages: [{ role: 'user', content: prompt }],
     ...(tokens ? { max_tokens: tokens } : {}),
   });
-  let response = await postChatCompletion(buildBody(maxTokens), 30_000);
+  const timeoutMs = timeoutForMaxTokens(maxTokens);
+  let response = await postChatCompletion(buildBody(maxTokens), timeoutMs);
 
   if (!response.ok && response.status === 400 && maxTokens) {
     const errorText = await response.clone().text();
     const ceiling = parseMaxTokensCeiling(errorText);
     if (ceiling && ceiling < maxTokens) {
-      response = await postChatCompletion(buildBody(ceiling), 30_000);
+      response = await postChatCompletion(buildBody(ceiling), timeoutMs);
     }
   }
 

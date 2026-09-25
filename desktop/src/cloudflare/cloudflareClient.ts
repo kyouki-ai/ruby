@@ -48,6 +48,10 @@ export async function generateTextWithCloudflare(prompt: string, maxTokens?: num
 /** Same as generateTextWithCloudflare, but also reports whether the response was cut off by max_tokens. */
 export async function generateTextWithCloudflareFinish(prompt: string, maxTokens?: number): Promise<CloudflareResult> {
   if (!credentials) throw new Error('Cloudflare credentials are not set.');
+  // A flat 30s was fine for chat-sized replies, but a "Подробно" conspect
+  // rebuild asks for up to 8000 tokens and can genuinely take longer than
+  // that to generate - same reasoning as groqClient.ts's timeoutForMaxTokens.
+  const timeoutMs = maxTokens && maxTokens > 1000 ? 90_000 : 30_000;
   const response = await fetch(chatUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${credentials.apiToken}` },
@@ -56,7 +60,7 @@ export async function generateTextWithCloudflareFinish(prompt: string, maxTokens
       messages: [{ role: 'user', content: prompt }],
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {

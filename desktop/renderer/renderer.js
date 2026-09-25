@@ -576,12 +576,11 @@ window.lectureApp.onConnectionStatus((connected, tabTitle) => {
   liveAssignments = [];
   renderLiveAssignments();
   document.getElementById('silence-warning').style.display = 'none';
-  // The structured conspect is only built once, when recording stops (see
-  // main.ts) - rebuilding it continuously would burn through Gemini's free
-  // daily quota well before a full day of lectures is over. Showing an
-  // empty "will appear after you stop" panel for the entire recording was
-  // just dead space - hide it and let the transcript use the full width
-  // until there's actually something to show (see startFinalizingCountdown).
+  // The conspect is built incrementally in chunks throughout the recording
+  // (see buildNextLiveChunkIfDue in main.ts), but the first chunk takes a
+  // while to accumulate enough transcript - showing an empty panel for that
+  // whole stretch was just dead space, so hide it and let the transcript use
+  // the full width until onNotesUpdated below has real content to show.
   document.getElementById('live-notes-panel').style.display = 'none';
   notesBox.innerHTML = '';
 });
