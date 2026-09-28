@@ -227,6 +227,29 @@ function parseMaxTokensCeiling(errorText: string): number | null {
 }
 
 /**
+ * A different failure mode from the 400 above: the account's per-minute
+ * token budget (prompt + max_tokens combined) is smaller than what this
+ * request asked for, even though max_tokens alone is under the model's own
+ * ceiling. Seen in production on a "Подробно" rebuild: "Request too large
+ * ... on tokens per minute (TPM): Limit 8000, Requested 13103" - with
+ * DETAILED_MAX_TOKENS itself at 8000, that alone can eat the whole budget
+ * before the prompt is even counted. "Requested minus the max_tokens we
+ * asked for" gives the prompt's own token count, which lets us compute how
+ * much of the limit is actually left for output and retry once with that -
+ * otherwise the request fails outright and falls through to whichever
+ * weaker provider is next in the chain, silently losing "Подробно" quality.
+ */
+function parseTpmCeiling(errorText: string, requestedMaxTokens: number): number | null {
+  const match = errorText.match(/tokens per minute \(TPM\)\D*Limit (\d+), Requested (\d+)/i);
+  if (!match) return null;
+  const limit = parseInt(match[1], 10);
+  const requested = parseInt(match[2], 10);
+  const promptTokens = requested - requestedMaxTokens;
+  const newCeiling = limit - promptTokens - 50; // margin for estimate error
+  return newCeiling > 0 ? newCeiling : null;
+}
+
+/**
  * A flat 30s timeout was fine for chat-sized replies, but a "Подробно"
  * conspect rebuild asks for up to DETAILED_MAX_TOKENS (8000) and can
  * genuinely take longer than that to generate - especially in the retry loop
@@ -247,9 +270,10 @@ export async function generateTextWithGroqFinish(prompt: string, maxTokens?: num
   const timeoutMs = timeoutForMaxTokens(maxTokens);
   let response = await postChatCompletion(buildBody(maxTokens), timeoutMs);
 
-  if (!response.ok && response.status === 400 && maxTokens) {
+  if (!response.ok && (response.status === 400 || response.status === 413) && maxTokens) {
     const errorText = await response.clone().text();
-    const ceiling = parseMaxTokensCeiling(errorText);
+    const ceiling =
+      response.status === 413 ? parseTpmCeiling(errorText, maxTokens) : parseMaxTokensCeiling(errorText);
     if (ceiling && ceiling < maxTokens) {
       response = await postChatCompletion(buildBody(ceiling), timeoutMs);
     }

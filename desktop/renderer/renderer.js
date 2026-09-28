@@ -836,6 +836,14 @@ document.getElementById('stop-mic-btn').addEventListener('click', async () => {
       stopFinalizingCountdown();
       switchToTab('history');
       openSubjectGrid();
+      // The real save (main process side) keeps running even after we give
+      // up waiting here, but until now the only way to notice it never
+      // actually finished was restarting the app - findRecoverableSessions
+      // is normally only scanned at startup. Check right now instead, so a
+      // genuinely hung/failed finalize surfaces its autosaved content
+      // immediately as a restorable session, not silently, possibly forever
+      // if the user doesn't think to restart.
+      checkRecoverableSessions();
     }
   }
 });
@@ -1616,12 +1624,21 @@ async function openNote(subject, lecture, backTo) {
     } catch (err) {
       if (isManual) {
         const raw = String(err.message || err);
+        // tryProviders() only ever surfaces the LAST provider's error (see
+        // providerChain.ts) - that could be Groq, Gemini, or Cloudflare
+        // depending on which ones are configured and which failed last, so
+        // hardcoding one name here was actively misleading (e.g. blaming
+        // "Groq" for an error that Cloudflare produced after Groq and Gemini
+        // had already been tried). Each client prefixes its own errors with
+        // "<Provider> request failed" - pull the real name out of that.
+        const providerMatch = raw.match(/^(Groq|Gemini|Cloudflare) request failed/i);
+        const provider = providerMatch ? providerMatch[1] : t('note.rebuildFailedUnknownProvider');
         const message = /503|UNAVAILABLE|overloaded|высок(?:ий|ая) спрос/i.test(raw)
-          ? t('note.rebuildFailedOverload')
+          ? t('note.rebuildFailedOverload', { provider })
           : /429|rate.?limit/i.test(raw)
-            ? t('note.rebuildFailedRateLimit')
+            ? t('note.rebuildFailedRateLimit', { provider })
             : /reduce the length|context.?length|too many tokens/i.test(raw)
-              ? t('note.rebuildFailedTooLong')
+              ? t('note.rebuildFailedTooLong', { provider })
               : t('note.rebuildFailedGeneric', { error: raw });
         showAlert(t('note.rebuild'), message);
       }

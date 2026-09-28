@@ -743,6 +743,16 @@ async function finalizeSession(): Promise<void> {
     targetLectureFolder = null;
     targetIsFreshPlaceholder = false;
     isContinuationOfExistingLecture = false;
+    // currentSession is ONLY ever cleared by resetLectureState(), which the
+    // start-a-new-recording paths call - but IPC_START_MIC_SESSION's
+    // double-fire guard (`if (currentSession) return`) runs BEFORE that, so
+    // leaving it set here silently blocked every recording after the first
+    // one in a given app run (mic recordings especially: the renderer starts
+    // capturing audio locally regardless of whether this IPC call actually
+    // did anything, so the user saw a normal-looking recording UI while none
+    // of it was ever saved). A finished session is exactly what this guard
+    // should NOT be blocking against.
+    currentSession = null;
   }
 }
 
