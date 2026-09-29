@@ -26,6 +26,7 @@ const ICONS = {
   download: '<path d="M9 2.5v8M5.3 7.3 9 11l3.7-3.7M3.5 13.5h11"/>',
   stop: '<rect x="5.5" y="5.5" width="7" height="7" rx="1.2" fill="currentColor" stroke="none"/>',
   record: '<circle cx="9" cy="9" r="4.2" fill="currentColor" stroke="none"/>',
+  undo: '<path d="M5 6.5H12a3.5 3.5 0 0 1 0 7H8"/><path d="M7.5 4 5 6.5 7.5 9"/>',
 };
 
 function icon(name, size = 18) {

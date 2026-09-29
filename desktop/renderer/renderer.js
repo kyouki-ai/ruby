@@ -1346,6 +1346,7 @@ async function openNote(subject, lecture, backTo) {
           <button type="button" class="detail-toggle-btn" data-level="detailed">${escapeHtml(t('note.detailed'))}</button>
         </div>` : ''}
         ${hasRaw ? `<button class="ghost-btn" id="note-rebuild-btn">${icon('file', 14)}<span>${escapeHtml(t('note.rebuild'))}</span></button>` : ''}
+        <button class="ghost-btn" id="note-restore-btn" style="display:none">${icon('undo', 14)}<span>${escapeHtml(t('note.restorePrevious'))}</span></button>
         ${hasRaw ? `<button class="ghost-btn" id="note-original-btn">${icon('mic', 14)}<span>${escapeHtml(t('note.whatRecorded'))}</span></button>` : ''}
         <button class="ghost-btn" id="note-quiz-btn">${icon('help', 14)}<span>${escapeHtml(t('note.quiz'))}</span></button>
         <button class="ghost-btn" id="note-flashcards-btn">${icon('cards', 14)}<span>${escapeHtml(t('flashcards.button'))}</span></button>
@@ -1486,6 +1487,7 @@ async function openNote(subject, lecture, backTo) {
   const editActionsEl = wrapper.querySelector('#note-edit-actions');
   const editBtn = wrapper.querySelector('#note-edit-btn');
   const rebuildBtn = wrapper.querySelector('#note-rebuild-btn');
+  const restoreBtn = wrapper.querySelector('#note-restore-btn');
   const originalBtn = wrapper.querySelector('#note-original-btn');
   const quizBtn = wrapper.querySelector('#note-quiz-btn');
   const detailToggle = wrapper.querySelector('#note-detail-toggle');
@@ -1530,6 +1532,35 @@ async function openNote(subject, lecture, backTo) {
 
   renderOutline();
 
+  // Shown only once there's actually a prior version to go back to (see
+  // saveLectureMarkdown's backup-on-overwrite in libraryStore.ts) - hidden
+  // for a lecture that's never been rebuilt/edited yet.
+  async function refreshRestoreBtnVisibility() {
+    if (!restoreBtn) return;
+    const hasBackup = await window.lectureApp.hasNotesBackup(subject, lecture.folderName);
+    restoreBtn.style.display = hasBackup ? 'inline-flex' : 'none';
+  }
+  refreshRestoreBtnVisibility();
+
+  if (restoreBtn) {
+    restoreBtn.addEventListener('click', async () => {
+      const original = restoreBtn.innerHTML;
+      restoreBtn.disabled = true;
+      try {
+        const restored = await window.lectureApp.restorePreviousNotes(subject, lecture.folderName);
+        if (restored === null) return;
+        markdown = restored;
+        editorEl.value = markdown;
+        quizText = null;
+        if (!showingOriginal && !showingQuiz) showNotes();
+        renderOutline();
+      } finally {
+        restoreBtn.disabled = false;
+        restoreBtn.innerHTML = original;
+      }
+    });
+  }
+
   if (detailToggle) {
     detailToggle.querySelectorAll('.detail-toggle-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1545,6 +1576,12 @@ async function openNote(subject, lecture, backTo) {
     editorEl.style.display = editing ? 'block' : 'none';
     editActionsEl.style.display = editing ? 'flex' : 'none';
     if (rebuildBtn) rebuildBtn.style.display = editing ? 'none' : 'inline-flex';
+    // Only hides while editing - showing it back is refreshRestoreBtnVisibility's
+    // job (it may legitimately be hidden if there's no backup to restore).
+    if (restoreBtn) {
+      if (editing) restoreBtn.style.display = 'none';
+      else refreshRestoreBtnVisibility();
+    }
     if (originalBtn) originalBtn.style.display = editing ? 'none' : 'inline-flex';
     if (detailToggle) detailToggle.style.display = editing ? 'none' : 'flex';
     quizBtn.style.display = editing ? 'none' : 'inline-flex';
@@ -1621,6 +1658,7 @@ async function openNote(subject, lecture, backTo) {
       lecture.notesFailed = false;
       quizText = null; // stale now that the underlying notes changed
       if (!showingOriginal && !showingQuiz) showNotes();
+      refreshRestoreBtnVisibility();
     } catch (err) {
       if (isManual) {
         const raw = String(err.message || err);

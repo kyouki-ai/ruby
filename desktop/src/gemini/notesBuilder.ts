@@ -264,14 +264,101 @@ ${markedText || '(none)'}
 Write only the markdown notes, no preamble.`;
 }
 
+// Rebuilding used to send the ENTIRE (capped-at-45000-char, see capSourceText)
+// transcript in one request. For a long lecture that either silently lost
+// everything past the cap (a 99-minute lecture's rebuild covering only the
+// first ~43 minutes, seen in production) or tripped one of Groq's per-minute
+// token ceilings outright - seen as low as ~7000 tokens total (prompt +
+// response combined, or on some models the PROMPT alone) on an auto-picked
+// model - which then fell through to a weaker fallback provider that
+// doesn't follow the "Подробно" formatting instructions (bold terms, LaTeX,
+// timestamps) nearly as reliably. Chunking the rebuild the same way live
+// recording already does (buildLectureNotesChunk) fixes both problems at
+// once: every chunk is small enough to stay clear of any of those ceilings,
+// and nothing gets left out just because the lecture ran long.
+const REBUILD_CHUNK_CHARS = 15000;
+
+function chunkTranscriptAndSlides(
+  transcript: TranscriptSegment[],
+  slides: SlideEntry[]
+): { transcript: TranscriptSegment[]; slides: SlideEntry[] }[] {
+  const chunks: { transcript: TranscriptSegment[]; slides: SlideEntry[] }[] = [];
+  let currentSegs: TranscriptSegment[] = [];
+  let currentChars = 0;
+  for (const seg of transcript) {
+    if (currentSegs.length > 0 && currentChars + seg.text.length > REBUILD_CHUNK_CHARS) {
+      chunks.push({ transcript: currentSegs, slides: [] });
+      currentSegs = [];
+      currentChars = 0;
+    }
+    currentSegs.push(seg);
+    currentChars += seg.text.length;
+  }
+  if (currentSegs.length > 0) chunks.push({ transcript: currentSegs, slides: [] });
+  if (chunks.length === 0 && slides.length > 0) chunks.push({ transcript: [], slides: [] });
+
+  // Slot each slide into whichever chunk's transcript time range covers it
+  // (falling back to the last chunk), so slide content stays roughly aligned
+  // with the speech it was shown alongside instead of all piling onto one.
+  for (const slide of slides) {
+    let target = chunks[chunks.length - 1];
+    for (const chunk of chunks) {
+      const lastSeg = chunk.transcript[chunk.transcript.length - 1];
+      if (!lastSeg || slide.offsetSec <= lastSeg.endSec) {
+        target = chunk;
+        break;
+      }
+    }
+    target?.slides.push(slide);
+  }
+  return chunks;
+}
+
+const CONDENSE_PROMPT_PREFIX =
+  'Ниже подробный конспект лекции. Сократи его до краткого варианта: только ключевые определения, формулы и факты, ' +
+  'списком/буллетами, без длинных объяснений и повторов. Сохрани все "[mm:ss]" таймкоды у соответствующих пунктов и ' +
+  'формулы в LaTeX как есть. Пиши на том же языке, что и конспект ниже. Никакой преамбулы, только сокращённый markdown-конспект.\n\n' +
+  'ПОДРОБНЫЙ КОНСПЕКТ:\n';
+
 export async function buildLectureNotes(
   transcript: TranscriptSegment[],
   slides: SlideEntry[],
   markedMoments: MarkedMoment[] = [],
   detailLevel: NotesDetailLevel = 'concise'
 ): Promise<string> {
-  const prompt = buildPrompt(transcript, slides, markedMoments, detailLevel);
-  return generateLongText(prompt, detailLevel === 'detailed' ? DETAILED_MAX_TOKENS : CONCISE_MAX_TOKENS);
+  const chunks = chunkTranscriptAndSlides(transcript, slides);
+
+  // Short enough to fit safely in one request regardless - skip the chunking
+  // machinery and go straight to the familiar single-shot path.
+  if (chunks.length <= 1) {
+    const prompt = buildPrompt(transcript, slides, markedMoments, detailLevel);
+    return generateLongText(prompt, detailLevel === 'detailed' ? DETAILED_MAX_TOKENS : CONCISE_MAX_TOKENS);
+  }
+
+  let combined = '';
+  let languageAnchor: string | null = null;
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const chunkStart = chunk.transcript.length > 0 ? chunk.transcript[0].startSec : 0;
+    const chunkEnd = chunk.transcript.length > 0 ? chunk.transcript[chunk.transcript.length - 1].endSec : Infinity;
+    const chunkMoments = markedMoments.filter((m) => m.offsetSec >= chunkStart && m.offsetSec <= chunkEnd);
+    const text = await buildLectureNotesChunk(chunk.transcript, chunk.slides, chunkMoments, i === 0, languageAnchor);
+    combined = combined ? `${combined}\n${text}` : text;
+    if (!languageAnchor && chunk.transcript.length > 0) {
+      languageAnchor = chunk.transcript
+        .map((s) => s.text)
+        .join(' ')
+        .slice(0, 300);
+    }
+  }
+
+  // The chunks above are always written in the detailed style (see
+  // buildLectureNotesChunk) - "Кратко" condenses that combined result in one
+  // more pass instead of needing its own chunked/bullet-style prompt.
+  if (detailLevel === 'concise') {
+    return generateLongText(CONDENSE_PROMPT_PREFIX + capNotesForPrompt(combined), CONCISE_MAX_TOKENS);
+  }
+  return combined;
 }
 
 // Some auto-picked Groq models (see groqClient.ts's resolveTextModel) have a

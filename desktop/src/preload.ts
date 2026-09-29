@@ -130,6 +130,10 @@ contextBridge.exposeInMainWorld('lectureApp', {
     ipcRenderer.invoke(channels.IPC_CREATE_LECTURE, subject, title, groupId),
   saveLectureMarkdown: (subject: string, folderName: string, markdown: string): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_SAVE_LECTURE_MARKDOWN, subject, folderName, markdown),
+  hasNotesBackup: (subject: string, folderName: string): Promise<boolean> =>
+    ipcRenderer.invoke(channels.IPC_HAS_NOTES_BACKUP, subject, folderName),
+  restorePreviousNotes: (subject: string, folderName: string): Promise<string | null> =>
+    ipcRenderer.invoke(channels.IPC_RESTORE_PREVIOUS_NOTES, subject, folderName),
   renameLecture: (subject: string, folderName: string, newTitle: string): Promise<void> =>
     ipcRenderer.invoke(channels.IPC_RENAME_LECTURE, subject, folderName, newTitle),
   deleteLecture: (subject: string, folderName: string): Promise<void> =>

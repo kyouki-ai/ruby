@@ -1112,6 +1112,12 @@ function setupIpcHandlers(): void {
   ipcMain.handle(channels.IPC_SAVE_LECTURE_MARKDOWN, (_e, subject: string, folderName: string, markdown: string) =>
     library.saveLectureMarkdown(settings.libraryPath, subject, folderName, markdown)
   );
+  ipcMain.handle(channels.IPC_HAS_NOTES_BACKUP, (_e, subject: string, folderName: string) =>
+    library.hasNotesBackup(settings.libraryPath, subject, folderName)
+  );
+  ipcMain.handle(channels.IPC_RESTORE_PREVIOUS_NOTES, (_e, subject: string, folderName: string) =>
+    library.restorePreviousNotes(settings.libraryPath, subject, folderName)
+  );
   ipcMain.handle(channels.IPC_RENAME_LECTURE, (_e, subject: string, folderName: string, newTitle: string) =>
     library.renameLecture(settings.libraryPath, subject, folderName, newTitle)
   );

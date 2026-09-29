@@ -147,6 +147,10 @@ function notesPath(dir: string): string {
   return path.join(dir, 'notes.md');
 }
 
+function notesBackupPath(dir: string): string {
+  return path.join(dir, 'notes.backup.md');
+}
+
 function rawPath(dir: string): string {
   return path.join(dir, 'raw.json');
 }
@@ -397,7 +401,15 @@ export function loadLectureMeta(libraryPath: string, subject: string, folderName
   return readMeta(path.join(libraryPath, subject), folderName, subject);
 }
 
-/** Overwrites just the markdown body - used when the user edits a note by hand, or after a notes rebuild. */
+/**
+ * Overwrites just the markdown body - used when the user edits a note by
+ * hand, or after a notes rebuild. Every path that gets here replaces
+ * whatever was there before with no way back (a rebuild that comes out
+ * worse, or a manual edit typo) - keep one prior version as a backup file so
+ * restorePreviousNotes below has something to restore. Not done when the
+ * current notes.md is empty (a fresh placeholder) - there's nothing
+ * meaningful to preserve yet.
+ */
 export function saveLectureMarkdown(
   libraryPath: string,
   subject: string,
@@ -406,6 +418,12 @@ export function saveLectureMarkdown(
   notesFailed = false
 ): void {
   const dir = path.join(libraryPath, subject, folderName);
+  try {
+    const previous = fs.readFileSync(notesPath(dir), 'utf-8');
+    if (previous.trim()) fs.writeFileSync(notesBackupPath(dir), previous, 'utf-8');
+  } catch {
+    // No existing notes.md yet (brand new lecture) - nothing to back up.
+  }
   fs.writeFileSync(notesPath(dir), markdown, 'utf-8');
   try {
     const meta = JSON.parse(fs.readFileSync(metaPath(dir), 'utf-8'));
@@ -414,6 +432,27 @@ export function saveLectureMarkdown(
   } catch {
     // meta.json missing/corrupt - the markdown write above still succeeded.
   }
+}
+
+/** Whether a prior version exists to restore (see saveLectureMarkdown's backup step). */
+export function hasNotesBackup(libraryPath: string, subject: string, folderName: string): boolean {
+  return fs.existsSync(notesBackupPath(path.join(libraryPath, subject, folderName)));
+}
+
+/**
+ * Swaps notes.md with its backup instead of just copying the backup over -
+ * so clicking "restore" again undoes the restore itself, rather than the
+ * button becoming useless (or destructive) after one use.
+ */
+export function restorePreviousNotes(libraryPath: string, subject: string, folderName: string): string | null {
+  const dir = path.join(libraryPath, subject, folderName);
+  const backupFile = notesBackupPath(dir);
+  if (!fs.existsSync(backupFile)) return null;
+  const backup = fs.readFileSync(backupFile, 'utf-8');
+  const current = fs.readFileSync(notesPath(dir), 'utf-8');
+  fs.writeFileSync(notesPath(dir), backup, 'utf-8');
+  fs.writeFileSync(backupFile, current, 'utf-8');
+  return backup;
 }
 
 /**
