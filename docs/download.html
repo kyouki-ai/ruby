@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Скачать Ruby</title>
-<meta name="description" content="Скачать Ruby — приложение для записи и конспектирования лекций. Windows 10/11, бесплатно, свой Gemini API-ключ.">
+<meta name="description" content="Скачать Ruby — приложение для записи и конспектирования лекций. Windows и macOS, бесплатно, свой Gemini API-ключ.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -148,7 +148,7 @@
   <div class="section-pad" style="max-width: 1080px; margin: 0 auto; padding: 0 24px;">
     <div class="reveal" style="display: flex; gap: 8px; max-width: 640px; flex-wrap: wrap;" role="tablist" aria-label="Платформа">
       <button class="platform-btn active" data-platform="windows" type="button">Windows</button>
-      <button class="platform-btn" data-platform="mac" type="button" disabled>macOS <span class="mono" style="font-size: 9.5px; opacity: .7;">СКОРО</span></button>
+      <button class="platform-btn" data-platform="mac" type="button">macOS</button>
       <button class="platform-btn" data-platform="linux" type="button" disabled>Linux <span class="mono" style="font-size: 9.5px; opacity: .7;">СКОРО</span></button>
     </div>
   </div>
@@ -160,7 +160,7 @@
       <div class="mono" style="font-size: 10.5px; letter-spacing: .1em; color: var(--ink-dim); margin-bottom: 6px;">БИБЛИОТЕЧНАЯ КАРТОЧКА</div>
       <h2 style="font-size: 25px; font-weight: 660; margin-bottom: 22px;" id="platform-title">Ruby для Windows</h2>
       <div class="lib-line" style="padding-bottom: 8px; margin-bottom: 14px; display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-soft);">
-        <span class="mono">СИСТЕМА</span><span>Windows 10 / 11 (64-бит)</span>
+        <span class="mono">СИСТЕМА</span><span id="platform-system">Windows 10 / 11 (64-бит)</span>
       </div>
       <div class="lib-line" style="padding-bottom: 8px; margin-bottom: 14px; display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-soft);">
         <span class="mono">СТОИМОСТЬ</span><span>Бесплатно, свой Gemini-ключ</span>
@@ -170,9 +170,12 @@
       </div>
       <a href="https://github.com/kyouki-ai/ruby/releases/download/v0.6.3/Ruby-0.6.3-win.zip" id="download-btn" class="stamp-btn">
         <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5v9M5.2 8.2 9 12l3.8-3.8M3.5 14.5h11"/></svg>
-        Скачать Ruby.exe
+        <span id="download-btn-label">Скачать Ruby.exe</span>
       </a>
       <p class="mono" id="download-hint" style="margin-top: 16px; font-size: 10.5px; color: var(--ink-dim);">ZIP · ~110 МБ · РАСПАКУЙ И ЗАПУСТИ RUBY.EXE</p>
+      <p id="mac-gatekeeper-note" style="display: none; margin-top: 14px; font-size: 12px; line-height: 1.6; color: var(--ink-soft); border-top: 1px dashed rgba(221,63,101,.3); padding-top: 14px;">
+        Приложение пока не подписано сертификатом Apple (это платно) — при первом запуске macOS покажет «приложение повреждено» или «не удалось проверить издателя». Это не вирус: правый клик по <span class="mono">Ruby.app</span> → «Открыть» → «Всё равно открыть» (или Настройки → Конфиденциальность и безопасность → «Всё равно открыть»). Достаточно один раз.
+      </p>
     </div>
   </div>
 
@@ -183,11 +186,11 @@
       <p class="mono" style="font-size: 11px; color: var(--ink-dim); margin-bottom: 8px;">ТРИ ШАГА</p>
       <div class="step-row">
         <div class="step-num">01</div>
-        <p style="font-size: 13.5px; line-height: 1.6; color: var(--ink-soft);">Скачай и распакуй архив — установщик не нужен, приложение готово к запуску.</p>
+        <p style="font-size: 13.5px; line-height: 1.6; color: var(--ink-soft);" id="install-step-1">Скачай и распакуй архив — установщик не нужен, приложение готово к запуску.</p>
       </div>
       <div class="step-row">
         <div class="step-num">02</div>
-        <p style="font-size: 13.5px; line-height: 1.6; color: var(--ink-soft);">Запусти <span class="mono">Ruby.exe</span> и вставь свой бесплатный ключ с <span class="mono">aistudio.google.com/apikey</span> — карта не нужна.</p>
+        <p style="font-size: 13.5px; line-height: 1.6; color: var(--ink-soft);" id="install-step-2">Запусти <span class="mono">Ruby.exe</span> и вставь свой бесплатный ключ с <span class="mono">aistudio.google.com/apikey</span> — карта не нужна.</p>
       </div>
       <div class="step-row">
         <div class="step-num">03</div>
@@ -216,6 +219,49 @@
 </div>
 
 <script>
+  var PLATFORMS = {
+    windows: {
+      title: 'Ruby для Windows',
+      system: 'Windows 10 / 11 (64-бит)',
+      url: 'https://github.com/kyouki-ai/ruby/releases/download/v0.6.3/Ruby-0.6.3-win.zip',
+      label: 'Скачать Ruby.exe',
+      hint: 'ZIP · ~110 МБ · РАСПАКУЙ И ЗАПУСТИ RUBY.EXE',
+      gatekeeper: false,
+      step1: 'Скачай и распакуй архив — установщик не нужен, приложение готово к запуску.',
+      step2: 'Запусти <span class="mono">Ruby.exe</span> и вставь свой бесплатный ключ с <span class="mono">aistudio.google.com/apikey</span> — карта не нужна.'
+    },
+    mac: {
+      title: 'Ruby для macOS',
+      system: 'macOS 11+ (Intel и Apple Silicon)',
+      url: 'https://github.com/kyouki-ai/ruby/releases/download/v0.6.3/Ruby-0.6.3-universal.dmg',
+      label: 'Скачать Ruby.dmg',
+      hint: 'DMG · ~172 МБ · ОТКРОЙ И ПЕРЕТАЩИ RUBY В APPLICATIONS',
+      gatekeeper: true,
+      step1: 'Открой скачанный .dmg и перетащи <span class="mono">Ruby</span> в папку Applications.',
+      step2: 'Запусти Ruby из Applications (см. подсказку про Gatekeeper выше) и вставь свой бесплатный ключ с <span class="mono">aistudio.google.com/apikey</span> — карта не нужна.'
+    }
+  };
+
+  function selectPlatform(name) {
+    var p = PLATFORMS[name];
+    if (!p) return;
+    document.querySelectorAll('.platform-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.platform === name);
+    });
+    document.getElementById('platform-title').textContent = p.title;
+    document.getElementById('platform-system').textContent = p.system;
+    document.getElementById('download-btn').href = p.url;
+    document.getElementById('download-btn-label').textContent = p.label;
+    document.getElementById('download-hint').textContent = p.hint;
+    document.getElementById('mac-gatekeeper-note').style.display = p.gatekeeper ? 'block' : 'none';
+    document.getElementById('install-step-1').innerHTML = p.step1;
+    document.getElementById('install-step-2').innerHTML = p.step2;
+  }
+
+  document.querySelectorAll('.platform-btn:not([disabled])').forEach(function (btn) {
+    btn.addEventListener('click', function () { selectPlatform(btn.dataset.platform); });
+  });
+
   var toggleBtn = document.getElementById('mobile-nav-toggle');
   var menu = document.getElementById('mobile-menu');
   toggleBtn.addEventListener('click', function () { menu.classList.toggle('open'); });
