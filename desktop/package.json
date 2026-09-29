@@ -48,7 +48,7 @@
     },
     "mac": {
       "target": ["dmg", "zip"],
-      "icon": "assets/icon.png",
+      "icon": "assets/icon-1024.png",
       "category": "public.app-category.education",
       "identity": null,
       "extendInfo": {
