@@ -10,7 +10,7 @@
     "dev": "tsc -p tsconfig.json --watch",
     "pack": "npm run build && electron-builder --dir && node scripts/set-exe-icon.js",
     "dist": "npm run build && electron-builder",
-    "dist:mac": "npm run build && electron-builder --mac"
+    "dist:mac": "npm run build && electron-builder --mac --universal"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
