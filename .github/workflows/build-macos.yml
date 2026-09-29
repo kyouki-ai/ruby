@@ -18,7 +18,12 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag to attach the build to (only needed for a manual run - a tag push already knows its own tag)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -42,9 +47,23 @@ jobs:
       - name: Build macOS app (.dmg + .zip)
         run: npm run dist:mac
 
+      # Kept independently of the release-upload step below so a manual
+      # verification run (no target release/tag yet) still leaves something
+      # retrievable via `gh run download` instead of the build just
+      # vanishing with the runner once the job ends.
+      - name: Save build as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*-mac.zip
+
       - name: Upload to GitHub release
+        if: github.event_name == 'push' || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: |
             desktop/release/*.dmg
             desktop/release/*-mac.zip
