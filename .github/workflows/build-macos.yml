@@ -1,0 +1,50 @@
+name: Build macOS release
+
+# Builds the macOS app whenever a version tag is pushed (the same tags used
+# for the manual Windows release) and attaches it to that tag's GitHub
+# release - created here if it doesn't exist yet, or appended to if the
+# Windows build already created it. This exists because macOS builds can
+# only be produced on macOS itself (electron-builder doesn't support
+# cross-compiling a signable .dmg from Windows/Linux), and no Mac is
+# available for local packaging.
+#
+# The app is NOT code-signed or notarized (no Apple Developer account is
+# configured) - on first launch, macOS Gatekeeper will say the app "is
+# damaged" or "can't be verified". Right-click the app -> Open (or
+# System Settings -> Privacy & Security -> "Open Anyway") gets past this;
+# it's a one-time step per install.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build macOS app (.dmg + .zip)
+        run: npm run dist:mac
+
+      - name: Upload to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/release/*.dmg
+            desktop/release/*-mac.zip

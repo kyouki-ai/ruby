@@ -1335,8 +1335,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  // Tray app: stay alive even with no window open (except on macOS default,
-  // which doesn't apply here since this targets Windows).
+  // Tray app: stay alive even with no window open. This is macOS's own
+  // default behavior anyway (Electron doesn't fire the quit-on-this-event
+  // convention there), and this empty handler makes Windows/Linux match it
+  // instead of quitting the moment the last window closes.
 });
 
 app.on('will-quit', () => {

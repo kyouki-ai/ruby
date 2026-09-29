@@ -9,7 +9,8 @@
     "start": "npm run build && electron .",
     "dev": "tsc -p tsconfig.json --watch",
     "pack": "npm run build && electron-builder --dir && node scripts/set-exe-icon.js",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
@@ -44,6 +45,15 @@
       "target": "nsis",
       "icon": "assets/icon-ruby-v3.ico",
       "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "assets/icon.png",
+      "category": "public.app-category.education",
+      "identity": null,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Ruby нужен доступ к микрофону, чтобы записывать лекции."
+      }
     }
   }
 }
